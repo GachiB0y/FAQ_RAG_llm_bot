@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Conversation, Message
@@ -26,7 +26,7 @@ async def get_or_create_conversation(user_id: str, db: AsyncSession) -> Conversa
 async def save_message(
     conversation_id: str, role: str, content: str, db: AsyncSession
 ) -> Message:
-    """Save a single message to the conversation."""
+    """Save a single message and update conversation.updated_at atomically."""
     message = Message(
         id=str(uuid4()),
         conversation_id=conversation_id,
@@ -35,15 +35,15 @@ async def save_message(
     )
     db.add(message)
 
-    # Update conversation updated_at
-    result = await db.execute(
-        select(Conversation).where(Conversation.id == conversation_id)
+    # Touch conversation.updated_at with a targeted UPDATE (no extra SELECT needed)
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(updated_at=datetime.now(timezone.utc))
     )
-    conversation = result.scalar_one_or_none()
-    if conversation:
-        conversation.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
+    await db.refresh(message)
     return message
 
 
@@ -99,33 +99,21 @@ async def delete_history(user_id: str, db: AsyncSession) -> int:
     if conversation is None:
         return 0
 
-    count_result = await db.execute(
-        select(func.count(Message.id)).where(
-            Message.conversation_id == conversation.id
-        )
-    )
-    count = count_result.scalar_one()
-
-    await db.execute(
+    delete_result = await db.execute(
         delete(Message).where(Message.conversation_id == conversation.id)
     )
     await db.commit()
 
-    return count
+    return delete_result.rowcount
 
 
 async def cleanup_old_messages(retention_days: int, db: AsyncSession) -> int:
     """Delete messages older than retention_days. Returns count of deleted messages."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
-    count_result = await db.execute(
-        select(func.count(Message.id)).where(Message.created_at < cutoff)
-    )
-    count = count_result.scalar_one()
-
-    await db.execute(
+    result = await db.execute(
         delete(Message).where(Message.created_at < cutoff)
     )
     await db.commit()
 
-    return count
+    return result.rowcount
