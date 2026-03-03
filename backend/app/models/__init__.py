@@ -3,7 +3,7 @@ from .user import User, UserRole
 from .document import Document, DocumentStatus
 from .settings import SystemSettings
 from .conversation import Conversation
-from .message import Message
+from .message import Message, MessageRole
 
 __all__ = [
     "Base",
@@ -14,4 +14,5 @@ __all__ = [
     "SystemSettings",
     "Conversation",
     "Message",
+    "MessageRole",
 ]
