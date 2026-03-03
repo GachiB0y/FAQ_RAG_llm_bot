@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Conversation, Message
+from app.models import Conversation, Message, MessageRole
 
 
 async def get_or_create_conversation(user_id: str, db: AsyncSession) -> Conversation:
@@ -24,7 +24,7 @@ async def get_or_create_conversation(user_id: str, db: AsyncSession) -> Conversa
 
 
 async def save_message(
-    conversation_id: str, role: str, content: str, db: AsyncSession
+    conversation_id: str, role: MessageRole, content: str, db: AsyncSession
 ) -> Message:
     """Save a single message and update conversation.updated_at atomically."""
     message = Message(
