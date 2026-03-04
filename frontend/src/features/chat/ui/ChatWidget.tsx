@@ -3,20 +3,18 @@ import { useIntl } from 'react-intl';
 import {
   Badge,
   Box,
-  Button,
-  Collapse,
   Flex,
   IconButton,
   Input,
   Spinner,
   Text,
-  useDisclosure,
   useToast,
   VStack,
 } from '@chakra-ui/react';
 import type { ChatMessageItem } from '@features/chat/model';
 import { useChatHistory,useSendMessage } from '@features/chat/model';
-import type { ChatSource } from '@shared/api';
+
+import { SourcesSection } from './SourcesSection';
 
 const buildHistoricMessages = (
   pages: { messages: { role: string; content: string; created_at: string }[] }[]
@@ -31,29 +29,6 @@ const buildHistoricMessages = (
         created_at: msg.created_at,
       }))
     );
-
-const SourcesSection = ({ sources }: { sources: ChatSource[] }) => {
-  const { formatMessage } = useIntl();
-  const { isOpen, onToggle } = useDisclosure();
-
-  return (
-    <Box mt={1}>
-      <Button variant="link" size="xs" onClick={onToggle} colorScheme="gray">
-        {formatMessage({ id: 'chat.sources' })} ({sources.length})
-      </Button>
-      <Collapse in={isOpen}>
-        <VStack align="start" spacing={1} mt={1} pl={2} borderLeftWidth="2px" borderColor="gray.300">
-          {sources.map((source, idx) => (
-            <Text key={idx} fontSize="xs" color="gray.500">
-              {source.document}
-              {source.page != null ? ` (p. ${source.page})` : ''}
-            </Text>
-          ))}
-        </VStack>
-      </Collapse>
-    </Box>
-  );
-};
 
 export const ChatWidget = () => {
   const { formatMessage } = useIntl();
@@ -76,7 +51,9 @@ export const ChatWidget = () => {
     isLoading: isHistoryLoading,
   } = useChatHistory();
 
-  // On initial history load — populate localMessages and scroll to bottom
+  // useEffect: populate local state from server-fetched history on first load.
+  // Cannot derive this from query state directly because localMessages also
+  // accumulates new messages from the current session that aren't yet in the query cache.
   useEffect(() => {
     if (!historyData || historyLoaded) return;
 
@@ -93,14 +70,17 @@ export const ChatWidget = () => {
     setHistoryLoaded(true);
   }, [historyData, historyLoaded]);
 
-  // After initial history loads — scroll to bottom once
+  // useEffect: scroll to bottom once after initial history populates.
+  // Runs after historyLoaded flips to true; cannot be done synchronously during render.
   useEffect(() => {
     if (historyLoaded && !isFetchingNextPage) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [historyLoaded]);
 
-  // After loading older page — prepend to display and restore scroll position
+  // useEffect: prepend older pages and restore scroll position when a new page loads.
+  // Restoring scroll position requires measuring DOM scrollHeight after React renders,
+  // which must happen in an effect rather than during the render itself.
   useEffect(() => {
     if (!historyData || !historyLoaded) return;
     const allPages = historyData.pages;
@@ -199,7 +179,7 @@ export const ChatWidget = () => {
         )}
         <VStack spacing={3} align="stretch">
           {localMessages.map((msg, idx) => (
-            <Flex key={idx} justify={msg.role === 'user' ? 'flex-end' : 'flex-start'}>
+            <Flex key={msg.created_at ? `${msg.created_at}-${msg.role}` : `new-${idx}`} justify={msg.role === 'user' ? 'flex-end' : 'flex-start'}>
               <Box
                 maxW="75%"
                 px={4}
