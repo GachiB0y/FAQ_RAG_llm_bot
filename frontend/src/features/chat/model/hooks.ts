@@ -1,6 +1,6 @@
-import type { ChatRequest, ChatHistoryResponse } from '@shared/api';
+import type { ChatHistoryResponse,ChatRequest } from '@shared/api';
 import { chatApi } from '@shared/api';
-import { useMutation, useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery,useMutation } from '@tanstack/react-query';
 
 const CHAT_PAGE_SIZE = 50;
 
