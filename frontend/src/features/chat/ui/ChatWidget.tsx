@@ -14,16 +14,23 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
+import type { ChatMessageItem } from '@features/chat/model';
 import { useChatHistory,useSendMessage } from '@features/chat/model';
 import type { ChatSource } from '@shared/api';
 
-interface ChatMessageItem {
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: ChatSource[];
-  confidence?: number;
-  created_at?: string;
-}
+const buildHistoricMessages = (
+  pages: { messages: { role: string; content: string; created_at: string }[] }[]
+): ChatMessageItem[] =>
+  pages
+    .slice()
+    .reverse()
+    .flatMap((page) =>
+      page.messages.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        created_at: msg.created_at,
+      }))
+    );
 
 const SourcesSection = ({ sources }: { sources: ChatSource[] }) => {
   const { formatMessage } = useIntl();
@@ -82,18 +89,7 @@ export const ChatWidget = () => {
     // Pages: page[0] = most recent (offset=0), page[1] = older, etc.
     // Each page already in chronological order (reversed in service layer).
     // Final display order: oldest first → reverse pages, keep messages within each page as-is.
-    const historicMessages: ChatMessageItem[] = allPages
-      .slice()
-      .reverse()
-      .flatMap((page) =>
-        page.messages.map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-          created_at: msg.created_at,
-        }))
-      );
-
-    setLocalMessages(historicMessages);
+    setLocalMessages(buildHistoricMessages(allPages));
     setHistoryLoaded(true);
   }, [historyData, historyLoaded]);
 
@@ -110,17 +106,7 @@ export const ChatWidget = () => {
     const allPages = historyData.pages;
     if (allPages.length <= 1) return;
 
-    const historicMessages: ChatMessageItem[] = allPages
-      .slice()
-      .reverse()
-      .flatMap((page) =>
-        page.messages.map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-          created_at: msg.created_at,
-        }))
-      );
-    setLocalMessages(historicMessages);
+    setLocalMessages(buildHistoricMessages(allPages));
 
     // Restore scroll position after prepend
     if (scrollAreaRef.current && !isFetchingNextPage) {
