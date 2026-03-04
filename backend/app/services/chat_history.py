@@ -23,30 +23,6 @@ async def get_or_create_conversation(user_id: str, db: AsyncSession) -> Conversa
     return conversation
 
 
-async def save_message(
-    conversation_id: str, role: MessageRole, content: str, db: AsyncSession
-) -> Message:
-    """Save a single message and update conversation.updated_at atomically."""
-    message = Message(
-        id=str(uuid4()),
-        conversation_id=conversation_id,
-        role=role,
-        content=content,
-    )
-    db.add(message)
-
-    # Touch conversation.updated_at with a targeted UPDATE (no extra SELECT needed)
-    await db.execute(
-        update(Conversation)
-        .where(Conversation.id == conversation_id)
-        .values(updated_at=datetime.now(timezone.utc))
-    )
-
-    await db.commit()
-    await db.refresh(message)
-    return message
-
-
 async def get_history(
     user_id: str, limit: int, offset: int, db: AsyncSession
 ) -> tuple[list[Message], int]:
@@ -113,18 +89,26 @@ async def save_messages_pair(
     assistant_content: str,
     db: AsyncSession,
 ) -> None:
-    """Save user + assistant message pair atomically in one transaction."""
+    """Save user + assistant message pair atomically in one transaction.
+
+    Explicit created_at timestamps ensure user message always precedes
+    assistant message even within the same DB transaction (where
+    PostgreSQL's NOW() would return the same value for both).
+    """
+    now = datetime.now(timezone.utc)
     user_msg = Message(
         id=str(uuid4()),
         conversation_id=conversation_id,
         role=MessageRole.USER,
         content=user_content,
+        created_at=now,
     )
     assistant_msg = Message(
         id=str(uuid4()),
         conversation_id=conversation_id,
         role=MessageRole.ASSISTANT,
         content=assistant_content,
+        created_at=now + timedelta(microseconds=1),
     )
     db.add(user_msg)
     db.add(assistant_msg)
