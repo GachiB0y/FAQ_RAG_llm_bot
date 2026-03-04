@@ -8,19 +8,23 @@ from app.models import Conversation, Message, MessageRole
 
 
 async def get_or_create_conversation(user_id: str, db: AsyncSession) -> Conversation:
-    """Get existing conversation for user or create a new one."""
+    """Get existing conversation for user or create a new one (race-condition safe)."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    # Upsert: insert if not exists, do nothing on conflict (unique user_id)
+    stmt = (
+        pg_insert(Conversation)
+        .values(id=str(uuid4()), user_id=user_id)
+        .on_conflict_do_nothing(index_elements=["user_id"])
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+    # Now fetch (either the one we just inserted or the pre-existing one)
     result = await db.execute(
         select(Conversation).where(Conversation.user_id == user_id)
     )
-    conversation = result.scalar_one_or_none()
-
-    if conversation is None:
-        conversation = Conversation(id=str(uuid4()), user_id=user_id)
-        db.add(conversation)
-        await db.commit()
-        await db.refresh(conversation)
-
-    return conversation
+    return result.scalar_one()
 
 
 async def get_history(
@@ -123,12 +127,24 @@ async def save_messages_pair(
 
 
 async def cleanup_old_messages(retention_days: int, db: AsyncSession) -> int:
-    """Delete messages older than retention_days. Returns count of deleted messages."""
+    """Delete messages older than retention_days and orphaned conversations.
+
+    Returns count of deleted messages.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
     result = await db.execute(
         delete(Message).where(Message.created_at < cutoff)
     )
-    await db.commit()
 
+    # Remove conversations that now have no messages
+    await db.execute(
+        delete(Conversation).where(
+            ~Conversation.id.in_(
+                select(Message.conversation_id).distinct()
+            )
+        )
+    )
+
+    await db.commit()
     return result.rowcount

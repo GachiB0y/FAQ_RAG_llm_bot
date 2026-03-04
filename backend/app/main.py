@@ -32,7 +32,7 @@ async def _cleanup_loop(retention_days: int) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    print(f"Starting FAQ RAG Bot with LLM provider: {settings.LLM_PROVIDER}")
+    logger.info(f"Starting FAQ RAG Bot with LLM provider: {settings.LLM_PROVIDER}")
 
     cleanup_task = asyncio.create_task(
         _cleanup_loop(settings.CHAT_HISTORY_RETENTION_DAYS)
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    print("Shutting down FAQ RAG Bot")
+    logger.info("Shutting down FAQ RAG Bot")
 
 
 app = FastAPI(
