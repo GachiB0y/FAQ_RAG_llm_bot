@@ -11,7 +11,6 @@ from app.api.deps import (
 )
 from app.database import get_db
 from app.models.user import User
-from app.models.message import MessageRole
 from app.core.rag import RAGEngine
 from app.core.session import SessionManager
 from app.schemas.chat import (
@@ -23,7 +22,7 @@ from app.schemas.chat import (
 )
 from app.services.chat_history import (
     get_or_create_conversation,
-    save_message,
+    save_messages_pair,
     get_history,
     delete_history,
 )
@@ -54,13 +53,13 @@ async def chat(
 
     result = rag.query(data.message, chat_history=history)
 
+    # PostgreSQL: persist messages permanently (atomic pair, durable first)
+    conversation = await get_or_create_conversation(user.id, db)
+    await save_messages_pair(conversation.id, data.message, result["answer"], db)
+
+    # Redis: update hot context for RAG
     await session_mgr.add_message(session_id, "user", data.message)
     await session_mgr.add_message(session_id, "assistant", result["answer"])
-
-    # PostgreSQL: persist messages permanently
-    conversation = await get_or_create_conversation(user.id, db)
-    await save_message(conversation.id, MessageRole.USER, data.message, db)
-    await save_message(conversation.id, MessageRole.ASSISTANT, result["answer"], db)
 
     return ChatResponse(
         answer=result["answer"],

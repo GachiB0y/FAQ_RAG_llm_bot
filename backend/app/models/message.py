@@ -22,7 +22,7 @@ class Message(Base, UUIDMixin):
         nullable=False, index=True
     )
     role: Mapped[MessageRole] = mapped_column(
-        SQLEnum(MessageRole, values_callable=lambda x: [e.value for e in x]),
+        SQLEnum(MessageRole, values_callable=lambda x: [e.value for e in x], native_enum=False),
         nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)

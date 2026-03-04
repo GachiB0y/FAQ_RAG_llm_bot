@@ -107,6 +107,37 @@ async def delete_history(user_id: str, db: AsyncSession) -> int:
     return delete_result.rowcount
 
 
+async def save_messages_pair(
+    conversation_id: str,
+    user_content: str,
+    assistant_content: str,
+    db: AsyncSession,
+) -> None:
+    """Save user + assistant message pair atomically in one transaction."""
+    user_msg = Message(
+        id=str(uuid4()),
+        conversation_id=conversation_id,
+        role=MessageRole.USER,
+        content=user_content,
+    )
+    assistant_msg = Message(
+        id=str(uuid4()),
+        conversation_id=conversation_id,
+        role=MessageRole.ASSISTANT,
+        content=assistant_content,
+    )
+    db.add(user_msg)
+    db.add(assistant_msg)
+
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(updated_at=datetime.now(timezone.utc))
+    )
+
+    await db.commit()
+
+
 async def cleanup_old_messages(retention_days: int, db: AsyncSession) -> int:
     """Delete messages older than retention_days. Returns count of deleted messages."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
