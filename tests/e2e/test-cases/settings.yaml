@@ -1,0 +1,167 @@
+module: settings
+module_name: "Настройки"
+base_url: http://localhost:3000
+generated_at: "2026-03-09"
+source_files:
+  - backend/app/api/v1/settings.py
+  - frontend/src/features/settings-form/
+
+preconditions:
+  auth:
+    email: "admin@example.com"
+    password: "admin123"
+    role: admin
+
+test_cases:
+  # === Happy Path (001-099) ===
+
+  - id: settings-001
+    name: "Загрузка страницы настроек"
+    description: "Проверяем что все поля настроек загружаются с текущими значениями"
+    priority: high
+    new: false
+    tags:
+      - read
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/settings"
+        description: "Переходим на страницу настроек"
+
+      - action: wait_for
+        target: "Форма настроек"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Chunk Size"
+            description: "Поле размера чанка видно"
+          - type: text_visible
+            text: "LLM Provider"
+            description: "Поле провайдера LLM видно"
+          - type: text_visible
+            text: "Save Settings"
+            description: "Кнопка сохранения видна"
+          - type: screenshot
+            name: "settings-page-loaded"
+    cleanup: []
+
+  - id: settings-002
+    name: "Изменение и сохранение настроек RAG"
+    description: "Проверяем что можно изменить chunk_size и сохранить"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - update
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/settings"
+
+      - action: wait_for
+        target: "Форма настроек"
+        timeout: 5000
+
+      # Запоминаем текущие значения (через скриншот)
+      - action: verify
+        checks:
+          - type: screenshot
+            name: "settings-before-change"
+
+      - action: fill_form
+        fields:
+          - name: chunk_size
+            value: 1024
+            type: input
+        description: "Меняем chunk size на 1024"
+
+      - action: click
+        target: "Кнопка Save Settings"
+        description: "Сохраняем настройки"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "Settings saved successfully"
+            description: "Тост об успешном сохранении"
+          - type: screenshot
+            name: "settings-after-save"
+
+      # Проверяем что значение сохранилось (перезагрузка страницы)
+      - action: navigate
+        target: "/admin/settings"
+
+      - action: wait_for
+        target: "Форма настроек"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: screenshot
+            name: "settings-after-reload"
+            description: "Значение chunk_size должно быть 1024 после перезагрузки"
+    cleanup:
+      - action: restore_settings
+        values:
+          chunk_size: 512
+
+  - id: settings-003
+    name: "Изменение LLM провайдера"
+    description: "Проверяем что можно переключить LLM provider через select"
+    priority: medium
+    new: false
+    tags:
+      - crud
+      - update
+    steps:
+      - action: navigate
+        target: "/admin/settings"
+
+      - action: wait_for
+        target: "Форма настроек"
+        timeout: 5000
+
+      - action: fill_form
+        fields:
+          - name: llm_provider
+            value: "OpenAI"
+            type: select
+        description: "Выбираем OpenAI как провайдер"
+
+      - action: click
+        target: "Кнопка Save Settings"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "Settings saved successfully"
+            description: "Настройки сохранены"
+          - type: screenshot
+            name: "settings-llm-provider-changed"
+    cleanup:
+      - action: restore_settings
+        values:
+          llm_provider: "Ollama"
+
+  # === UI состояния (300-399) ===
+
+  - id: settings-300
+    name: "Loading state при загрузке настроек"
+    description: "Проверяем что skeleton loaders отображаются при загрузке"
+    priority: low
+    new: false
+    tags:
+      - ui
+      - loading
+    steps:
+      - action: navigate
+        target: "/admin/settings"
+
+      - action: verify
+        checks:
+          - type: screenshot
+            name: "settings-loading-state"
+            description: "Может быть виден skeleton loader"
+    cleanup: []

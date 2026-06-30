@@ -1,0 +1,201 @@
+module: auth
+module_name: "Авторизация"
+base_url: http://localhost:3000
+generated_at: "2026-03-09"
+source_files:
+  - backend/app/api/v1/auth.py
+  - frontend/src/features/auth-login/
+  - frontend/src/features/protected-route/
+
+preconditions:
+  auth:
+    email: "admin@example.com"
+    password: "admin123"
+    role: admin
+
+test_cases:
+  # === Happy Path (001-099) ===
+
+  - id: auth-001
+    name: "Логин с валидными данными"
+    description: "Проверяем что админ может войти с правильным email и паролем"
+    priority: high
+    new: false
+    tags:
+      - happy-path
+      - login
+    steps:
+      - action: navigate
+        target: "/login"
+        description: "Открываем страницу логина"
+
+      - action: wait_for
+        target: "Форма логина"
+        timeout: 5000
+        description: "Ждём загрузку формы"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "admin@example.com"
+            type: input
+          - name: password
+            value: "admin123"
+            type: input
+        description: "Вводим валидные credentials"
+
+      - action: click
+        target: "Кнопка входа (Sign In / Войти)"
+        description: "Нажимаем кнопку логина"
+
+      - action: verify
+        checks:
+          - type: redirected_to
+            value: "/admin"
+            description: "Должен произойти redirect на админку"
+          - type: text_not_visible
+            text: "Sign In"
+            description: "Форма логина не должна быть видна"
+    cleanup: []
+
+  - id: auth-002
+    name: "Логаут"
+    description: "Проверяем что пользователь может выйти из системы"
+    priority: high
+    new: false
+    tags:
+      - happy-path
+      - logout
+    steps:
+      - action: navigate
+        target: "/admin"
+        description: "Открываем админку (должен быть залогинен)"
+
+      - action: click
+        target: "Кнопка выхода (Logout / Выйти)"
+        description: "Нажимаем кнопку логаута"
+
+      - action: verify
+        checks:
+          - type: redirected_to
+            value: "/login"
+            description: "Должен произойти redirect на страницу логина"
+    cleanup: []
+
+  # === Валидация (100-199) ===
+
+  - id: auth-100
+    name: "Логин с неверным паролем"
+    description: "Проверяем что при неправильном пароле показывается ошибка"
+    priority: high
+    new: false
+    tags:
+      - validation
+      - negative
+    steps:
+      - action: navigate
+        target: "/login"
+        description: "Открываем страницу логина"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "admin@example.com"
+            type: input
+          - name: password
+            value: "wrongpassword"
+            type: input
+        description: "Вводим неверный пароль"
+
+      - action: click
+        target: "Кнопка входа"
+        description: "Нажимаем кнопку логина"
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Invalid email or password"
+            description: "Должна появиться ошибка авторизации"
+          - type: url_contains
+            value: "/login"
+            description: "Должны остаться на странице логина"
+    cleanup: []
+
+  - id: auth-101
+    name: "Логин с несуществующим email"
+    description: "Проверяем что при несуществующем email показывается ошибка"
+    priority: high
+    new: false
+    tags:
+      - validation
+      - negative
+    steps:
+      - action: navigate
+        target: "/login"
+        description: "Открываем страницу логина"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "nonexistent@test.com"
+            type: input
+          - name: password
+            value: "anypassword"
+            type: input
+        description: "Вводим несуществующий email"
+
+      - action: click
+        target: "Кнопка входа"
+        description: "Нажимаем кнопку логина"
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Invalid email or password"
+            description: "Должна появиться ошибка авторизации"
+    cleanup: []
+
+  - id: auth-102
+    name: "Логин с пустыми полями"
+    description: "Проверяем что форма не отправляется с пустыми полями"
+    priority: medium
+    new: false
+    tags:
+      - validation
+    steps:
+      - action: navigate
+        target: "/login"
+        description: "Открываем страницу логина"
+
+      - action: click
+        target: "Кнопка входа"
+        description: "Нажимаем кнопку логина без заполнения полей"
+
+      - action: verify
+        checks:
+          - type: url_contains
+            value: "/login"
+            description: "Должны остаться на странице логина"
+    cleanup: []
+
+  # === Негативные сценарии (200-299) ===
+
+  - id: auth-200
+    name: "Доступ к админке без авторизации"
+    description: "Проверяем что неавторизованный пользователь не может зайти в админку"
+    priority: high
+    new: false
+    tags:
+      - security
+      - negative
+    steps:
+      - action: navigate
+        target: "/admin/users"
+        description: "Пытаемся зайти напрямую на страницу пользователей"
+
+      - action: verify
+        checks:
+          - type: redirected_to
+            value: "/login"
+            description: "Должен произойти redirect на страницу логина"
+    cleanup: []

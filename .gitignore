@@ -1,0 +1,61 @@
+# ─────────────── OS ───────────────
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# ─────────────── Secrets / env ───────────────
+.env
+.env.*
+!.env.example
+
+# ─────────────── Python ───────────────
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+**/.tox/
+
+# ─────────────── Node / Frontend ───────────────
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/coverage/
+**/.eslintcache
+*.tsbuildinfo
+
+# ─────────────── IDE / Local tools ───────────────
+**/.claude/
+**/.cursor/
+**/.vscode/
+**/.idea/
+
+# ─────────────── ML experiment runtime ───────────────
+backend/mlruns/
+backend/mlflow.db
+backend/tests/eval/samples_*.json
+backend/tests/eval/readable/
+
+# ─────────────── Backend runtime data ───────────────
+backend/uploads/
+backend/.uploads/
+
+# ─────────────── Test corpus (not in repo) ───────────────
+docs_for_test_rag/
+
+# ─────────────── Misc / posторонние ───────────────
+LocalHeld_Flutter_Estimate_v2.xlsx
+admin-tester.skill
+test-generator.skill
+zifUGoKX
+docs/plans/image-pdf-page.png
+
+# ─────────────── Logs ───────────────
+*.log
+logs/

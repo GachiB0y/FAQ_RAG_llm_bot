@@ -1,0 +1,183 @@
+module: chat
+module_name: "Чат с RAG"
+base_url: http://localhost:3000
+generated_at: "2026-03-09"
+source_files:
+  - backend/app/api/v1/chat.py
+  - backend/app/core/rag/engine.py
+  - frontend/src/features/chat/
+
+preconditions:
+  auth:
+    email: "admin@example.com"
+    password: "admin123"
+    role: admin
+
+test_cases:
+  # === Happy Path (001-099) ===
+
+  - id: chat-001
+    name: "Открытие страницы чата"
+    description: "Проверяем что чат загружается с полем ввода и областью сообщений"
+    priority: high
+    new: false
+    tags:
+      - happy-path
+      - read
+    steps:
+      - action: navigate
+        target: "/admin/chat"
+        description: "Переходим в чат"
+
+      - action: wait_for
+        target: "Поле ввода сообщения"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Type your message"
+            description: "Placeholder поля ввода виден"
+          - type: screenshot
+            name: "chat-page-loaded"
+    cleanup: []
+
+  - id: chat-002
+    name: "Отправка сообщения и получение ответа"
+    description: "Проверяем что бот отвечает на вопрос пользователя"
+    priority: high
+    new: false
+    tags:
+      - happy-path
+      - core
+    steps:
+      - action: navigate
+        target: "/admin/chat"
+
+      - action: wait_for
+        target: "Поле ввода сообщения"
+        timeout: 5000
+
+      - action: type_text
+        target: "Поле ввода сообщения"
+        value: "Привет, как дела?"
+        description: "Вводим тестовое сообщение"
+
+      - action: click
+        target: "Кнопка отправки сообщения (Send)"
+        description: "Отправляем сообщение"
+
+      - action: wait_for
+        target: "Ответ бота"
+        timeout: 30000
+        description: "Ждём ответа (LLM может работать долго)"
+
+      - action: verify
+        checks:
+          - type: row_count
+            operator: ">="
+            value: 2
+            description: "Должно быть минимум 2 сообщения (вопрос + ответ)"
+          - type: screenshot
+            name: "chat-message-sent-and-received"
+    cleanup: []
+
+  - id: chat-003
+    name: "Отправка сообщения через Enter"
+    description: "Проверяем что Enter отправляет сообщение"
+    priority: medium
+    new: false
+    tags:
+      - happy-path
+      - keyboard
+    steps:
+      - action: navigate
+        target: "/admin/chat"
+
+      - action: wait_for
+        target: "Поле ввода сообщения"
+        timeout: 5000
+
+      - action: type_text
+        target: "Поле ввода сообщения"
+        value: "Тестовое сообщение через Enter"
+
+      - action: key
+        value: "Enter"
+        description: "Отправляем через Enter"
+
+      - action: wait_for
+        target: "Ответ бота"
+        timeout: 30000
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Тестовое сообщение через Enter"
+            description: "Наше сообщение видно в чате"
+          - type: screenshot
+            name: "chat-enter-send"
+    cleanup: []
+
+  # === Валидация (100-199) ===
+
+  - id: chat-100
+    name: "Отправка пустого сообщения"
+    description: "Проверяем что пустое сообщение не отправляется"
+    priority: medium
+    new: false
+    tags:
+      - validation
+    steps:
+      - action: navigate
+        target: "/admin/chat"
+
+      - action: wait_for
+        target: "Поле ввода сообщения"
+        timeout: 5000
+
+      - action: click
+        target: "Кнопка отправки сообщения"
+        description: "Нажимаем Send без ввода текста"
+
+      - action: verify
+        checks:
+          - type: element_disabled
+            target: "Кнопка отправки"
+            description: "Кнопка должна быть disabled при пустом поле"
+          - type: screenshot
+            name: "chat-empty-send-blocked"
+    cleanup: []
+
+  # === UI состояния (300-399) ===
+
+  - id: chat-300
+    name: "Индикатор загрузки при ожидании ответа"
+    description: "Проверяем что показывается spinner во время ожидания ответа от LLM"
+    priority: low
+    new: false
+    tags:
+      - ui
+      - loading
+    steps:
+      - action: navigate
+        target: "/admin/chat"
+
+      - action: wait_for
+        target: "Поле ввода сообщения"
+        timeout: 5000
+
+      - action: type_text
+        target: "Поле ввода сообщения"
+        value: "Расскажи подробно о квантовой физике"
+        description: "Отправляем длинный вопрос чтобы увидеть loading"
+
+      - action: key
+        value: "Enter"
+
+      - action: verify
+        checks:
+          - type: screenshot
+            name: "chat-loading-spinner"
+            description: "Должен быть виден индикатор загрузки"
+    cleanup: []

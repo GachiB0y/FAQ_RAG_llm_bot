@@ -1,0 +1,251 @@
+module: documents
+module_name: "Управление документами"
+base_url: http://localhost:3000
+generated_at: "2026-03-09"
+source_files:
+  - backend/app/api/v1/documents.py
+  - backend/app/core/rag/loader.py
+  - frontend/src/features/document-upload/
+  - frontend/src/features/documents-table/
+
+preconditions:
+  auth:
+    email: "admin@example.com"
+    password: "admin123"
+    role: admin
+
+test_cases:
+  # === Happy Path (001-099) ===
+
+  - id: docs-001
+    name: "Просмотр списка документов"
+    description: "Проверяем что страница документов загружается с таблицей и зоной загрузки"
+    priority: high
+    new: false
+    tags:
+      - read
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+        description: "Переходим на страницу документов"
+
+      - action: wait_for
+        target: "Страница документов"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Upload"
+            description: "Зона загрузки должна быть видна"
+          - type: text_visible
+            text: "Drag and drop"
+            description: "Инструкция по drag&drop"
+          - type: screenshot
+            name: "documents-page-loaded"
+    cleanup: []
+
+  - id: docs-002
+    name: "Загрузка TXT документа"
+    description: "Проверяем загрузку текстового файла через кнопку upload"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - create
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+
+      - action: wait_for
+        target: "Зона загрузки документов"
+        timeout: 5000
+
+      # Создаём тестовый файл
+      - action: click
+        target: "Кнопка Upload Document"
+        description: "Кликаем по кнопке загрузки"
+
+      - action: fill_form
+        fields:
+          - name: document
+            value: "/tmp/test-upload.txt"
+            type: file
+        description: "Выбираем файл для загрузки"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "Document uploaded successfully"
+            description: "Тост об успешной загрузке"
+          - type: table_contains
+            value: "test-upload.txt"
+            description: "Документ должен появиться в таблице"
+          - type: badge
+            target: "Строка test-upload.txt"
+            text: "READY"
+            color: "green"
+            description: "Статус должен стать READY"
+    cleanup:
+      - action: delete_via_ui
+        target: "Кнопка удаления в строке test-upload.txt"
+        confirm: true
+
+  - id: docs-003
+    name: "Удаление документа"
+    description: "Проверяем удаление документа через confirmation dialog"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - delete
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+
+      - action: wait_for
+        target: "Таблица документов"
+        timeout: 5000
+
+      # Загрузить документ для удаления (если нет документов)
+      - action: fill_form
+        fields:
+          - name: document
+            value: "/tmp/test-delete.txt"
+            type: file
+
+      - action: wait_for
+        target: "test-delete.txt"
+        timeout: 10000
+
+      - action: click
+        target: "Кнопка удаления в строке test-delete.txt"
+
+      - action: wait_for
+        target: "Диалог подтверждения"
+
+      - action: click
+        target: "Кнопка подтверждения удаления"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "Document deleted successfully"
+            description: "Тост об успешном удалении"
+          - type: table_not_contains
+            value: "test-delete.txt"
+            description: "Документ не должен быть в таблице"
+    cleanup: []
+
+  - id: docs-004
+    name: "Замена документа"
+    description: "Проверяем замену существующего документа новым файлом"
+    priority: medium
+    new: false
+    tags:
+      - crud
+      - update
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+
+      - action: wait_for
+        target: "Таблица документов"
+        timeout: 5000
+
+      # Загружаем исходный документ
+      - action: fill_form
+        fields:
+          - name: document
+            value: "/tmp/test-replace-original.txt"
+            type: file
+
+      - action: wait_for
+        target: "test-replace-original.txt"
+        timeout: 10000
+
+      # Заменяем
+      - action: click
+        target: "Кнопка замены (Replace) в строке test-replace-original.txt"
+        description: "Нажимаем кнопку замены"
+
+      - action: fill_form
+        fields:
+          - name: replace_file
+            value: "/tmp/test-replace-new.txt"
+            type: file
+        description: "Выбираем новый файл"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "uploaded"
+            description: "Тост об успешной замене"
+          - type: screenshot
+            name: "after-document-replace"
+    cleanup:
+      - action: delete_via_ui
+        target: "Кнопка удаления заменённого документа"
+        confirm: true
+
+  # === Валидация (100-199) ===
+
+  - id: docs-100
+    name: "Загрузка файла неподдерживаемого формата"
+    description: "Проверяем что .exe/.jpg и другие неразрешённые форматы отклоняются"
+    priority: high
+    new: false
+    tags:
+      - validation
+      - negative
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: ".txt, .md, .html, .pdf, .docx, .xlsx"
+            description: "Список разрешённых форматов должен быть виден"
+          - type: screenshot
+            name: "allowed-formats-visible"
+    cleanup: []
+
+  # === UI состояния (300-399) ===
+
+  - id: docs-300
+    name: "Отображение колонок таблицы документов"
+    description: "Проверяем что таблица отображает все необходимые колонки"
+    priority: low
+    new: false
+    tags:
+      - ui
+    steps:
+      - action: navigate
+        target: "/admin/documents"
+
+      - action: wait_for
+        target: "Таблица документов"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "Name"
+            description: "Колонка имени документа"
+          - type: text_visible
+            text: "Type"
+            description: "Колонка типа файла"
+          - type: text_visible
+            text: "Size"
+            description: "Колонка размера"
+          - type: text_visible
+            text: "Status"
+            description: "Колонка статуса"
+          - type: screenshot
+            name: "documents-table-columns"
+    cleanup: []

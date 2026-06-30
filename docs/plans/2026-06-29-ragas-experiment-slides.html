@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Ragas + MLflow для оценки RAG · ФПСР · июнь 2026</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- Reveal.js core (через CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/white.min.css">
+
+  <style>
+    :root {
+      --primary: #1f4e79;
+      --secondary: #2e75b6;
+      --good: #2e7d32;
+      --bad: #c62828;
+      --accent: #f57c00;
+    }
+    .reveal { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .reveal h1 { color: var(--primary); font-size: 2.0em; }
+    .reveal h2 { color: var(--secondary); border-bottom: 3px solid var(--secondary); padding-bottom: 8px; }
+    .reveal h3 { color: var(--primary); }
+    .reveal section { font-size: 0.85em; }
+
+    .reveal table {
+      margin: 0.5em auto;
+      border-collapse: collapse;
+      font-size: 0.72em;
+      width: 95%;
+    }
+    .reveal table th {
+      background: var(--primary); color: white;
+      padding: 8px 12px; text-align: left;
+    }
+    .reveal table td {
+      padding: 7px 12px; border-bottom: 1px solid #ddd;
+    }
+    .reveal table tr:nth-child(even) td { background: #f5f9fc; }
+
+    .reveal pre { font-size: 0.55em; line-height: 1.3; }
+    .reveal code { background: #eef3f8; padding: 2px 6px; border-radius: 3px; color: var(--primary); }
+    .reveal pre code { background: #f5f9fc; padding: 14px; border-left: 4px solid var(--secondary); }
+
+    .lead { text-align: center; }
+    .lead h1 { font-size: 2.4em; margin-bottom: 30px; }
+    .lead .subtitle { font-size: 1.1em; color: #555; margin-bottom: 50px; }
+
+    .big { font-size: 2.5em; font-weight: bold; color: var(--primary); }
+    .delta-up { color: var(--good); font-weight: bold; }
+    .delta-down { color: var(--bad); font-weight: bold; }
+    .accent { color: var(--accent); }
+    .muted { color: #777; font-size: 0.85em; }
+
+    .two-col { display: flex; gap: 30px; }
+    .two-col > div { flex: 1; }
+
+    .bar-graph { font-family: monospace; font-size: 0.7em; text-align: left; line-height: 1.6; }
+    .bar-graph .bar { display: inline-block; background: var(--secondary); height: 16px; vertical-align: middle; }
+    .bar-graph .bar-good { background: var(--good); }
+    .bar-graph .label { display: inline-block; width: 170px; }
+    .bar-graph .val { display: inline-block; width: 70px; text-align: right; padding-left: 10px; }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { padding: 8px 0 8px 30px; position: relative; }
+    .checklist li::before {
+      content: '✓'; color: var(--good); font-weight: bold;
+      position: absolute; left: 0; font-size: 1.3em;
+    }
+
+    .footer-note { font-size: 0.6em; color: #888; margin-top: 30px; }
+  </style>
+</head>
+<body>
+
+<div class="reveal">
+<div class="slides">
+
+<!-- ============ SLIDE 1: TITLE ============ -->
+<section class="lead">
+  <h1>Оценка RAG-системы<br>через <span style="color: var(--secondary)">Ragas + MLflow</span></h1>
+  <div class="subtitle">Эксперимент на корпусе документов ФПСР</div>
+  <p><strong>Гипотеза:</strong> hybrid retrieval (dense + BM25) должен превзойти<br>
+  dense-only на корпусе с формальными ссылками (статьи, ФЗ, аббревиатуры).</p>
+  <p class="muted">Александр Волков · июнь 2026</p>
+</section>
+
+<!-- ============ SLIDE 2: WHY ============ -->
+<section>
+  <h2>Зачем оценивать RAG автоматически?</h2>
+  <ul>
+    <li><strong>Любое изменение</strong> в RAG-pipeline (модель, чанкер, retriever, prompt) — может улучшить <em>или ухудшить</em> качество</li>
+    <li><strong>Ручная проверка не масштабируется</strong>: 5 примеров — не показатель, 100 — никто читать не будет</li>
+    <li>Нужен <strong>воспроизводимый, числовой</strong> способ:
+      <ul>
+        <li>сравнить «было vs стало»</li>
+        <li>блокировать регрессии в CI</li>
+        <li>объяснить команде «почему это лучше»</li>
+      </ul>
+    </li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 3: GOAL ============ -->
+<section>
+  <h2>Цель и гипотеза</h2>
+
+  <h3>Цель</h3>
+  <ol>
+    <li>Освоить <strong>Ragas + MLflow</strong> на реальном проекте</li>
+    <li>Измерить качество текущего RAG</li>
+    <li><strong>Проверить:</strong> даёт ли hybrid search прирост на нашем корпусе?</li>
+  </ol>
+
+  <h3>Гипотеза</h3>
+  <p>На корпусе с <strong>формальными ссылками</strong> (ФЗ № 7-ФЗ, § 21.3, БЕКОСО, МКПС) dense-vector search <span class="delta-down">проигрывает</span> sparse-поиску по recall:</p>
+  <ul>
+    <li>Embedding-модель «понимает темы», но плохо различает близкие термины</li>
+    <li>BM25 ищет по <strong>лексическому совпадению</strong> → находит точные ссылки моментально</li>
+    <li><strong>RRF-фьюжен</strong> даёт лучшее из двух миров</li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 4: PIPELINE ============ -->
+<section>
+  <h2>Архитектура pipeline</h2>
+  <pre><code>PDF → chunks → Knowledge Graph → Test set (с personas) → RAG → Ragas → MLflow
+       (512т)   (Ragas)            (20 вопросов)             (top_k=5)  judge   (compare)</code></pre>
+
+  <div class="two-col">
+    <div>
+      <h3>Независимо от mode</h3>
+      <ul>
+        <li>Парсер, chunker (512/50)</li>
+        <li>KG + Test set (один раз)</li>
+        <li>LLM-генератор и судья</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Меняется</h3>
+      <p style="font-size: 1.4em;">Только<br><strong class="accent">retrieval mode:</strong><br><code>dense</code> vs <code>hybrid</code></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 5: STACK ============ -->
+<section>
+  <h2>Стек и модели</h2>
+  <div class="two-col">
+    <div>
+      <h3>Инфраструктура</h3>
+      <table>
+        <tr><th>Слой</th><th>Инструмент</th></tr>
+        <tr><td>Векторная БД</td><td>Qdrant</td></tr>
+        <tr><td>RAG-фреймворк</td><td>LlamaIndex</td></tr>
+        <tr><td>Eval-фреймворк</td><td>Ragas 0.2.15</td></tr>
+        <tr><td>Трекинг</td><td>MLflow 3.14</td></tr>
+        <tr><td>Sparse-векторы</td><td>FastEmbed (BM25)</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Модели</h3>
+      <table>
+        <tr><th>Роль</th><th>Модель</th></tr>
+        <tr><td>Embeddings</td><td><code>bge-m3</code> (Ollama)</td></tr>
+        <tr><td>Sparse</td><td><code>Qdrant/bm25</code></td></tr>
+        <tr><td>RAG gen</td><td><code>nemotron-3-super-120b</code></td></tr>
+        <tr><td>KG / testset / judge</td><td><code>gemma-4-31b-it</code></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 6: CORPUS ============ -->
+<section>
+  <h2>Корпус</h2>
+  <p>3 PDF Федерации Практической Стрельбы России:</p>
+  <table>
+    <tr><th>Файл</th><th>Стр.</th><th>Чанков</th></tr>
+    <tr><td>Положение о членстве ОСОО ФПСР</td><td>12</td><td>31</td></tr>
+    <tr><td>Правила вида спорта 2025</td><td>145</td><td>385</td></tr>
+    <tr><td>Кратко о вступлении (картинка)</td><td>1</td><td>2</td></tr>
+    <tr style="background: #e8f0f8"><td><strong>Итого</strong></td><td><strong>158</strong></td><td><strong>418</strong></td></tr>
+  </table>
+  <h3>2 коллекции в Qdrant</h3>
+  <ul>
+    <li><code>documents</code> — только dense (1024-dim)</li>
+    <li><code>documents_hybrid</code> — dense + sparse (BM25)</li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 7: TESTSET ============ -->
+<section>
+  <h2>Тестовый набор: 20 вопросов с personas</h2>
+  <p>Сгенерированы через <strong>Ragas TestsetGenerator</strong> из knowledge graph.</p>
+  <div class="two-col">
+    <div>
+      <h3>3 persona</h3>
+      <ul>
+        <li><strong>novice</strong><br><em>«слыш ты там по ФЗ № 114 че там написано»</em></li>
+        <li><strong>instructor</strong><br><em>терминологично, со сроками</em></li>
+        <li><strong>lawyer</strong><br><em>точные ссылки на ФЗ № 7, 82, 150, 329</em></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Distribution</h3>
+      <table>
+        <tr><th>Тип</th><th>%</th><th>Шт</th></tr>
+        <tr><td>Single-hop</td><td>60%</td><td>12</td></tr>
+        <tr><td>Multi-hop abstract</td><td>20%</td><td>4</td></tr>
+        <tr><td>Multi-hop specific</td><td>20%</td><td>4</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 8: METRICS ============ -->
+<section>
+  <h2>Метрики Ragas (LLM-as-judge)</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="color: var(--accent)">Про LLM-генератор</h3>
+      <ul>
+        <li><strong>Faithfulness</strong><br>Нет ли галлюцинаций? Доля claims в ответе, подкреплённых контекстом</li>
+        <li><strong>Answer Relevancy</strong><br>Отвечает ли на вопрос? Cosine между «восстановленным» вопросом и оригиналом</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color: var(--secondary)">Про retrieval</h3>
+      <ul>
+        <li><strong>Context Precision (with ref)</strong><br>Не приволок ли мусор? Доля релевантных чанков в top-k</li>
+        <li><strong>Context Recall</strong><br>Нашёл ли всё нужное? Доля claims из reference, выводимых из контекста</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 9: EXPERIMENT ============ -->
+<section>
+  <h2>Эксперимент</h2>
+  <p><strong>Сценарий:</strong> прогнать 20 вопросов через RAG <strong>дважды</strong> — единственное отличие <code>retrieval_mode</code>.</p>
+  <table>
+    <tr><th>Параметр</th><th>Dense run</th><th>Hybrid run</th></tr>
+    <tr><td><strong>retrieval</strong></td>
+        <td>bge-m3 (cosine, top_k=5)</td>
+        <td><strong>bge-m3 + BM25</strong> (RRF, top_k=5)</td></tr>
+    <tr><td>generator</td><td>nemotron-120b</td><td>nemotron-120b</td></tr>
+    <tr><td>judge</td><td>gemma-4-31b</td><td>gemma-4-31b</td></tr>
+    <tr><td>dataset</td><td>testset_auto.json</td><td>testset_auto.json</td></tr>
+    <tr><td>top_k</td><td>5</td><td>5</td></tr>
+  </table>
+  <p style="text-align:center; margin-top: 20px;">→ Два MLflow run-а для compare-сравнения.</p>
+</section>
+
+<!-- ============ SLIDE 10: RESULTS TABLE ============ -->
+<section>
+  <h2>🏆 Результаты</h2>
+  <table>
+    <tr><th>Метрика</th><th>Dense</th><th>Hybrid</th><th>Δ</th></tr>
+    <tr><td><strong>Faithfulness</strong></td><td>0.826</td><td><strong>1.000</strong></td><td class="delta-up">+21%</td></tr>
+    <tr><td><strong>Answer Relevancy</strong></td><td>0.700</td><td><strong>0.816</strong></td><td class="delta-up">+17%</td></tr>
+    <tr><td><strong>Context Precision</strong></td><td>0.606</td><td><strong>0.917</strong></td><td class="delta-up">+51%</td></tr>
+    <tr><td><strong>Context Recall</strong></td><td>0.736</td><td><strong>1.000</strong></td><td class="delta-up">+36%</td></tr>
+  </table>
+  <h3 style="text-align: center; margin-top: 40px; color: var(--good);">
+    Hybrid выиграл по всем 4 метрикам.
+  </h3>
+</section>
+
+<!-- ============ SLIDE 11: BAR GRAPH ============ -->
+<section>
+  <h2>Визуально</h2>
+  <div class="bar-graph">
+    <div><span class="label">Faithfulness dense</span><span class="bar" style="width: 248px"></span><span class="val">0.83</span></div>
+    <div><span class="label">Faithfulness hybrid</span><span class="bar bar-good" style="width: 300px"></span><span class="val">1.00 <span class="delta-up">+21%</span></span></div>
+    <br>
+    <div><span class="label">Relevancy dense</span><span class="bar" style="width: 210px"></span><span class="val">0.70</span></div>
+    <div><span class="label">Relevancy hybrid</span><span class="bar bar-good" style="width: 245px"></span><span class="val">0.82 <span class="delta-up">+17%</span></span></div>
+    <br>
+    <div><span class="label">Precision dense</span><span class="bar" style="width: 182px"></span><span class="val">0.61</span></div>
+    <div><span class="label">Precision hybrid</span><span class="bar bar-good" style="width: 275px"></span><span class="val">0.92 <span class="delta-up">+51%</span></span></div>
+    <br>
+    <div><span class="label">Recall dense</span><span class="bar" style="width: 221px"></span><span class="val">0.74</span></div>
+    <div><span class="label">Recall hybrid</span><span class="bar bar-good" style="width: 300px"></span><span class="val">1.00 <span class="delta-up">+36%</span></span></div>
+  </div>
+  <p class="footer-note">Полные графики и срезы — в MLflow UI → Compare → Parallel Coordinates Plot</p>
+</section>
+
+<!-- ============ SLIDE 12: PER METRIC ============ -->
+<section>
+  <h2>Что произошло на каждой метрике</h2>
+
+  <h3>Context Recall: 0.736 → <span class="delta-up">1.000</span> (+36%)</h3>
+  <p>Dense пропускал ~25% нужной инфы — типично на вопросах со ссылками на статьи и ФЗ. <strong>BM25 находит точные совпадения</strong>, RRF поднимает их в топ-5.</p>
+
+  <h3>Context Precision: 0.606 → <span class="delta-up">0.917</span> (+51%)</h3>
+  <p>При dense-only <strong>40% top-5 были мусором</strong> → LLM отвлекалась. Hybrid отсёк нерелевантные.</p>
+
+  <h3>Faithfulness: 0.826 → <span class="delta-up">1.000</span> (+21%)</h3>
+  <p>Когда контекст полный, LLM <strong>не нужно</strong> «достраивать» из общих знаний → нет галлюцинаций. Идеал <strong>1.0</strong>.</p>
+
+  <h3>Answer Relevancy: 0.700 → <span class="delta-up">0.816</span> (+17%)</h3>
+  <p>Точнее контекст → точнее ответ по сути. Особенно заметно на multi-hop.</p>
+</section>
+
+<!-- ============ SLIDE 13: PRACTICAL IMPLICATIONS ============ -->
+<section>
+  <h2>Что это означает в практике</h2>
+  <ul class="checklist">
+    <li>На корпусе с <strong>формализмами</strong> (ФЗ, статьи, аббревиатуры) <strong>hybrid обязателен</strong></li>
+    <li>Embedding-модели «понимают темы», но <strong>проваливаются</strong> на точных терминах<br>
+        <span class="muted">(ФЗ № 115 vs ФЗ № 150 — практически одинаковый embedding)</span></li>
+    <li>BM25 эти случаи решает <strong>из коробки</strong>, добавление ~20 строк кода</li>
+    <li><strong>Самое дешёвое улучшение</strong> RAG в данном кейсе</li>
+  </ul>
+
+  <h3 style="margin-top: 30px;">Что попадёт в прод</h3>
+  <ul>
+    <li><code>enable_hybrid=True</code> в <code>QdrantVectorStore</code></li>
+    <li>Переиндексация существующих 418 чанков с sparse-векторами</li>
+    <li>BM25 как часть штатного pipeline</li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 14: TOOLS LEARNED ============ -->
+<section>
+  <h2>Что мы узнали об инструментах</h2>
+
+  <h3>Ragas</h3>
+  <ul>
+    <li><strong>Knowledge graph + Personas</strong> → реалистичный тестовый набор, не «придумай 10 вопросов»</li>
+    <li>4 метрики покрывают и <strong>LLM-генератор</strong>, и <strong>retrieval</strong> независимо</li>
+    <li>LLM-as-judge — настолько умное, насколько умна модель-судья</li>
+  </ul>
+
+  <h3>MLflow</h3>
+  <ul>
+    <li><strong>Compare-режим</strong> для двух run-ов — самое ценное</li>
+    <li>Логирование <code>by_synth__*</code> срезов даёт детализацию по типу вопроса</li>
+    <li>SQLite-backend + локальный артефакт-стор → подходит для self-hosted</li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 15: LIMITATIONS ============ -->
+<section>
+  <h2>Ограничения эксперимента</h2>
+
+  <h3 class="accent">Методологические</h3>
+  <ul>
+    <li><strong>20 вопросов</strong> — статистика хлипкая. Стоит расширить до 50–100</li>
+    <li><code>gemma-4-31b</code> был и testset-генератором, и судьёй → потенциальный bias.<br>
+        Для прода нужен Claude Haiku / GPT-4 в роли судьи</li>
+    <li><strong>Картинка-PDF</strong> парсится в кракозябры — BM25 цепляет мусор. Нужен OCR</li>
+  </ul>
+
+  <h3 class="accent">Технические</h3>
+  <ul>
+    <li>OpenRouter free имеет лимиты (20 RPM, 2000/день), регулярные 429-ки</li>
+    <li>Ollama на Mac OOM-ит при нескольких моделях — настройка <code>num_ctx</code></li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 16: NEXT STEPS ============ -->
+<section>
+  <h2>Дальнейшие шаги</h2>
+
+  <h3>Короткие (1–2 дня)</h3>
+  <ol>
+    <li><strong>Hybrid в прод</strong>: <code>retriever.py</code> → <code>enable_hybrid=True</code> + реиндексация</li>
+    <li><strong>Платный судья</strong>: Claude Haiku 4.5 ($0.10/прогон) → стабильные оценки</li>
+    <li><strong>OCR</strong>: <code>pytesseract</code> для картинок-PDF</li>
+  </ol>
+
+  <h3>Средние (1–2 недели)</h3>
+  <ol start="4">
+    <li>Расширение датасета до 50–100 вопросов + ручная курация</li>
+    <li><strong>CI-интеграция</strong>: GitHub Action, падает если faithfulness просел &gt; 5%</li>
+  </ol>
+
+  <h3>Длинные (1–2 месяца)</h3>
+  <ol start="6">
+    <li>Prefect для оркестрации ingest и nightly eval</li>
+    <li>Полный корпус ФПСР (10 директорий с Яндекс-Диска)</li>
+    <li>Реальные user-вопросы вместо/в дополнение к auto-generated</li>
+  </ol>
+</section>
+
+<!-- ============ SLIDE 17: ARTIFACTS ============ -->
+<section>
+  <h2>Артефакты эксперимента</h2>
+
+  <h3>В репозитории</h3>
+  <ul style="font-size: 0.85em;">
+    <li><code>backend/scripts/eval_rag.py</code> — главный eval (dense/hybrid, openrouter/ollama)</li>
+    <li><code>backend/scripts/generate_kg.py</code> — knowledge graph</li>
+    <li><code>backend/scripts/generate_testset.py</code> — testset с personas</li>
+    <li><code>backend/scripts/_hybrid_retriever.py</code> — hybrid retriever (dense + BM25 + RRF)</li>
+    <li><code>backend/tests/eval/readable/compare_dense_vs_hybrid.xlsx</code> — сравнение</li>
+  </ul>
+
+  <h3>MLflow</h3>
+  <ul>
+    <li>UI: <code>http://localhost:5050</code> → ragas-eval → Compare</li>
+    <li>BD: <code>backend/mlflow.db</code> (SQLite)</li>
+  </ul>
+
+  <h3>Документация</h3>
+  <ul>
+    <li><code>2026-06-29-ragas-experiment-report.md</code> — полный отчёт</li>
+    <li><code>2026-06-28-ragas-full-workflow.md</code> — теория Ragas</li>
+  </ul>
+</section>
+
+<!-- ============ SLIDE 18: THANKS ============ -->
+<section class="lead">
+  <h1>Спасибо!</h1>
+  <h3 style="color: var(--secondary);">Вопросы?</h3>
+  <div style="margin-top: 50px; font-size: 0.85em;">
+    <p>📂 Репозиторий: <code>FAQ_RAG_llm_bot/</code></p>
+    <p>📊 MLflow: <code>http://localhost:5050</code></p>
+    <p>📄 Полный отчёт: <code>docs/plans/2026-06-29-ragas-experiment-report.md</code></p>
+  </div>
+</section>
+
+</div>
+</div>
+
+<!-- Reveal.js script -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    controls: true,
+    progress: true,
+    transition: 'slide',
+    transitionSpeed: 'fast',
+  });
+</script>
+
+</body>
+</html>

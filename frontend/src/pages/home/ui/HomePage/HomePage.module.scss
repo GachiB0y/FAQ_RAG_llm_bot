@@ -1,0 +1,15 @@
+.root {
+  width: 100%;
+  padding: 4rem 0;
+}
+
+.sectionTitle {
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  font-weight: 600;
+}
+
+.sectionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}

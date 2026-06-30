@@ -1,0 +1,4 @@
+import { POSTS_DEFAULT_PAGE, POSTS_PAGE_SIZES } from '@entities/post';
+
+export const POSTS_PAGE_INITIAL = POSTS_DEFAULT_PAGE;
+export const POSTS_PAGE_SIZE_INITIAL = POSTS_PAGE_SIZES[0];

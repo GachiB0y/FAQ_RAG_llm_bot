@@ -1,0 +1,432 @@
+module: users
+module_name: "Управление пользователями"
+base_url: http://localhost:3000
+generated_at: "2026-03-09"
+source_files:
+  - backend/app/api/v1/users.py
+  - backend/app/schemas/user.py
+  - frontend/src/features/users-table/
+
+preconditions:
+  auth:
+    email: "admin@example.com"
+    password: "admin123"
+    role: admin
+
+test_cases:
+  # === Happy Path (001-099) ===
+
+  - id: users-001
+    name: "Просмотр списка пользователей"
+    description: "Проверяем что таблица пользователей загружается и отображает данные"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - read
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/users"
+        description: "Переходим на страницу пользователей"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+        description: "Ждём загрузку таблицы"
+
+      - action: verify
+        checks:
+          - type: row_count
+            operator: ">="
+            value: 1
+            description: "В таблице должен быть хотя бы один пользователь (админ)"
+          - type: table_contains
+            column: "Email"
+            value: "admin@example.com"
+            description: "Текущий админ должен быть в таблице"
+          - type: badge
+            target: "Строка admin@example.com"
+            text: "admin"
+            description: "Роль должна отображаться как badge"
+    cleanup: []
+
+  - id: users-002
+    name: "Создание пользователя с валидными данными"
+    description: "Проверяем полный цикл создания нового пользователя"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - create
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/users"
+        description: "Переходим на страницу пользователей"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+
+      - action: click
+        target: "Кнопка создания пользователя (Create User / Add User)"
+        description: "Открываем модалку создания"
+
+      - action: wait_for
+        target: "Модальное окно создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "testuser-create@test.com"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+          - name: role
+            value: "user"
+            type: select
+        description: "Заполняем форму"
+
+      - action: click
+        target: "Кнопка Create / Создать"
+        description: "Отправляем форму"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "User created successfully"
+            description: "Тост об успешном создании"
+          - type: modal_closed
+            description: "Модалка должна закрыться"
+          - type: table_contains
+            value: "testuser-create@test.com"
+            description: "Новый пользователь в таблице"
+    cleanup:
+      - action: delete_via_ui
+        target: "Кнопка удаления в строке testuser-create@test.com"
+        confirm: true
+
+  - id: users-003
+    name: "Редактирование email пользователя"
+    description: "Проверяем что можно изменить email через модалку редактирования"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - update
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+
+      # Сначала создадим тестового пользователя
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "edit-test@test.com"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+          - name: role
+            value: "user"
+            type: select
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: wait_for
+        target: "edit-test@test.com"
+        timeout: 3000
+
+      # Теперь редактируем
+      - action: click
+        target: "Кнопка редактирования (Edit) в строке edit-test@test.com"
+        description: "Открываем модалку редактирования"
+
+      - action: wait_for
+        target: "Модальное окно редактирования"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "edited-user@test.com"
+            type: input
+
+      - action: click
+        target: "Кнопка Save / Сохранить"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "User updated successfully"
+            description: "Тост об успешном обновлении"
+          - type: table_contains
+            value: "edited-user@test.com"
+            description: "Обновлённый email в таблице"
+          - type: table_not_contains
+            value: "edit-test@test.com"
+            description: "Старый email не должен быть в таблице"
+    cleanup:
+      - action: delete_via_ui
+        target: "Кнопка удаления в строке edited-user@test.com"
+        confirm: true
+
+  - id: users-004
+    name: "Удаление пользователя"
+    description: "Проверяем удаление пользователя через confirmation dialog"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - delete
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+
+      # Создаём пользователя для удаления
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "delete-me@test.com"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+          - name: role
+            value: "user"
+            type: select
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: wait_for
+        target: "delete-me@test.com"
+        timeout: 3000
+
+      # Удаляем
+      - action: click
+        target: "Кнопка удаления (Delete) в строке delete-me@test.com"
+        description: "Открываем диалог подтверждения"
+
+      - action: wait_for
+        target: "Диалог подтверждения удаления"
+
+      - action: click
+        target: "Кнопка Delete / Удалить в диалоге подтверждения"
+        description: "Подтверждаем удаление"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "User deleted successfully"
+            description: "Тост об успешном удалении"
+          - type: table_not_contains
+            value: "delete-me@test.com"
+            description: "Удалённый пользователь не должен быть в таблице"
+    cleanup: []
+
+  - id: users-005
+    name: "Переключение статуса пользователя (active/inactive)"
+    description: "Проверяем что toggle switch меняет статус пользователя"
+    priority: high
+    new: false
+    tags:
+      - crud
+      - update
+      - happy-path
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+
+      # Создаём пользователя
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "toggle-test@test.com"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+          - name: role
+            value: "user"
+            type: select
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: wait_for
+        target: "toggle-test@test.com"
+        timeout: 3000
+
+      # Переключаем статус
+      - action: click
+        target: "Switch/toggle активности в строке toggle-test@test.com"
+        description: "Деактивируем пользователя"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "User updated successfully"
+            description: "Тост об обновлении"
+          - type: badge
+            target: "Строка toggle-test@test.com"
+            text: "inactive"
+            description: "Статус должен измениться на inactive"
+    cleanup:
+      - action: delete_via_ui
+        target: "Кнопка удаления в строке toggle-test@test.com"
+        confirm: true
+
+  # === Валидация (100-199) ===
+
+  - id: users-100
+    name: "Создание пользователя с невалидным email"
+    description: "Проверяем что форма не принимает невалидный email"
+    priority: high
+    new: false
+    tags:
+      - validation
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "not-an-email"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "email"
+            description: "Должно появиться сообщение о невалидном email"
+          - type: modal_closed
+            description: "Модалка НЕ должна закрыться (verify fails = good)"
+    cleanup: []
+
+  - id: users-101
+    name: "Создание пользователя с коротким паролем"
+    description: "Проверяем что пароль менее 6 символов не принимается"
+    priority: high
+    new: false
+    tags:
+      - validation
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "shortpass@test.com"
+            type: input
+          - name: password
+            value: "12345"
+            type: input
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: verify
+        checks:
+          - type: text_visible
+            text: "password"
+            description: "Должно появиться сообщение о коротком пароле"
+    cleanup: []
+
+  - id: users-102
+    name: "Создание пользователя с дублирующимся email"
+    description: "Проверяем что нельзя создать двух пользователей с одинаковым email"
+    priority: high
+    new: false
+    tags:
+      - validation
+      - negative
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: click
+        target: "Кнопка создания пользователя"
+
+      - action: fill_form
+        fields:
+          - name: email
+            value: "admin@example.com"
+            type: input
+          - name: password
+            value: "testpass123"
+            type: input
+
+      - action: click
+        target: "Кнопка Create"
+
+      - action: verify
+        checks:
+          - type: toast
+            text: "error"
+            description: "Должен появиться тост с ошибкой"
+    cleanup: []
+
+  # === Негативные сценарии (200-299) ===
+
+  - id: users-200
+    name: "Админ не может удалить сам себя"
+    description: "Проверяем что кнопка удаления недоступна или заблокирована для текущего пользователя"
+    priority: medium
+    new: false
+    tags:
+      - security
+      - negative
+    steps:
+      - action: navigate
+        target: "/admin/users"
+
+      - action: wait_for
+        target: "Таблица пользователей"
+        timeout: 5000
+
+      - action: verify
+        checks:
+          - type: screenshot
+            name: "admin-self-delete-check"
+            description: "Проверяем визуально что кнопка удаления для admin@example.com отсутствует или disabled"
+    cleanup: []
