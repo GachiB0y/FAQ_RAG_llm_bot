@@ -59,11 +59,11 @@ mpl.rcParams['figure.dpi'] = 100
 
 # Путь к репо — работает если notebook лежит в notebooks/
 REPO = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
-MLRUNS = REPO / 'backend' / 'mlruns' / '1'
+DATA_DIR = REPO / 'notebooks' / 'data'     # CSV каждого MLflow run (снепшот)
 EVAL_DIR = REPO / 'backend' / 'tests' / 'eval'
 
 print(f'REPO:   {REPO}')
-print(f'MLruns: {MLRUNS} (exists={MLRUNS.exists()})')
+print(f'Data:   {DATA_DIR} (exists={DATA_DIR.exists()})')
 print(f'Eval:   {EVAL_DIR} (exists={EVAL_DIR.exists()})')"""
 )
 
@@ -81,7 +81,7 @@ code(
 
 dfs = {}
 for name, rid in RUNS.items():
-    csv = MLRUNS / rid / 'artifacts' / 'eval_results_json.csv'
+    csv = DATA_DIR / f'{rid}.csv'
     dfs[name] = pd.read_csv(csv)
     print(f'{name:14s}  rows={len(dfs[name])}  path={csv.relative_to(REPO)}')"""
 )
