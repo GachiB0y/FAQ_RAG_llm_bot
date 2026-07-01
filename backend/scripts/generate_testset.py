@@ -173,10 +173,11 @@ def main() -> None:
         persona_list=PERSONAS,
     )
 
+    # NOTE: MultiHopAbstractQuerySynthesizer убран — на нашем KG (только entities_overlap
+    # рёбра, без cosine) он падает с "No clusters found". Оставляем single + multi-specific.
     query_distribution = [
         (SingleHopSpecificQuerySynthesizer(llm=llm), 0.6),
-        (MultiHopAbstractQuerySynthesizer(llm=llm), 0.2),
-        (MultiHopSpecificQuerySynthesizer(llm=llm), 0.2),
+        (MultiHopSpecificQuerySynthesizer(llm=llm), 0.4),
     ]
 
     print("\n>> Генерирую тестовый датасет (LLM-вызовы, ~3 на каждый вопрос)…")
