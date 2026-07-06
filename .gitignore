@@ -56,6 +56,9 @@ test-generator.skill
 zifUGoKX
 docs/plans/image-pdf-page.png
 
+# ─────────────── Jupyter ───────────────
+**/.ipynb_checkpoints/
+
 # ─────────────── Logs ───────────────
 *.log
 logs/
