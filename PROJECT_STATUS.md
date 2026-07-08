@@ -12,7 +12,7 @@
 ## 🎯 ТЕКУЩИЙ ФОКУС
 
 **MLOps-практики** — превращаем «набор скриптов» в воспроизводимый pipeline.
-Следующее действие: **Шаг A — uv + lockfile**.
+Сделано: A1 (uv) ✅, A2 (Makefile) ✅. Следующее действие: **A3 (Langfuse)** или **A6 (Prefect)**.
 Детальный трекер: [docs/plans/2026-07-06-mlops-implementation-status.md](docs/plans/2026-07-06-mlops-implementation-status.md)
 
 ---
@@ -59,7 +59,8 @@
 | 30.06 | **Эксперимент №2 (чистый):** независимый судья (gpt-oss-120b) + OCR картинки + testset на 3 документа. **Вывод: hybrid НЕ помогает** — эксп.1 был искажён self-bias судьи. Урок: методология eval критичнее оптимизации | [clean-experiment-report](docs/plans/2026-06-30-clean-experiment-report.md) |
 | 30.06 | Графики matplotlib в отчёт, Jupyter notebook для анализа, CSV-снепшоты в репо | [notebook](notebooks/01_experiment_analysis.ipynb) |
 | 02.07 | Роадмап production-инструментов 2026 (vLLM, LangGraph, pgvector, Langfuse) | [production-tooling-roadmap](docs/plans/2026-07-02-production-tooling-roadmap.md) |
-| 06.07 | Анализ MLOps-зрелости (7 болей) + пошаговый трекер внедрения (uv→Makefile→Langfuse→DVC→CI) | [mlops-maturity-analysis](docs/plans/2026-07-06-mlops-maturity-analysis.md), [mlops-implementation-status](docs/plans/2026-07-06-mlops-implementation-status.md) |
+| 06.07 | Анализ MLOps-зрелости (7 болей) + пошаговый трекер внедрения (uv→Makefile→Langfuse→DVC→CI). Вводные доки по uv/Makefile/Prefect. Скилл `tracking-experiments-with-mlflow` | [mlops-maturity-analysis](docs/plans/2026-07-06-mlops-maturity-analysis.md), [mlops-implementation-status](docs/plans/2026-07-06-mlops-implementation-status.md) |
+| 08.07 | **A1 (uv)**: pyproject+eval-группа, uv.lock (214 пакетов), Dockerfile на `uv sync`, OCR в образ, venv→/opt/venv (фикс bind-mount). **A2 (Makefile)**: весь пайплайн через `make <target>` | [mlops-implementation-status](docs/plans/2026-07-06-mlops-implementation-status.md) |
 
 **Ключевой результат экспериментов:** на нашем корпусе (bge-m3 + документы ФПСР)
 hybrid search **не даёт значимого преимущества** — dense достаточен. Главный урок —
