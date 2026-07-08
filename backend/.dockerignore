@@ -2,3 +2,8 @@ __pycache__
 *.pyc
 .git
 .env
+.venv
+mlruns
+mlflow.db
+uploads
+tests/eval/readable
