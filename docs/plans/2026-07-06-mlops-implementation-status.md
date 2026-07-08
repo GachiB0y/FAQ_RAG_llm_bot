@@ -11,8 +11,8 @@
 
 ## 📍 YOU ARE HERE
 
-> **Текущий шаг:** ✅ Шаг A (uv) готов. Следующее действие — **Шаг B (Makefile)**.
-> Обнови этот блок в конце каждой сессии — одна строка «что сделано, что дальше».
+> **Текущий шаг:** ✅ Шаги A (uv) + B (Makefile) готовы. Следующее — **Шаг A3 (Langfuse)**
+> или **Шаг F (Prefect)**. Обнови этот блок в конце каждой сессии.
 
 **Лог сессий:**
 - 2026-07-06: создан план + вводные доки (uv, Makefile, Prefect intro). Решили
@@ -20,7 +20,10 @@
 - 2026-07-08: **Шаг A (uv) сделан.** pyproject + группа eval с пинами, uv.lock
   (214 пакетов), Dockerfile на `uv sync`, OCR-пакеты запечены в образ. Поймали и
   починили баг: bind-mount ./backend:/app прятал /app/.venv → вынесли venv в
-  /opt/venv. Eval-стек работает из коробки без ручных pip install. Дальше — Makefile.
+  /opt/venv. Eval-стек работает из коробки без ручных pip install.
+- 2026-07-08: **Шаг B (Makefile) сделан.** Все docker exec простыни → цели
+  (make corpus/ingest/ocr/kg/testset/eval-dense/eval-hybrid/mlflow-ui). Ключ из
+  .env.eval, модели через переменные, `make help` самодокументируется. Дальше — Langfuse или Prefect.
 
 ---
 
@@ -42,24 +45,20 @@
 
 ---
 
-### ⬜ Шаг B — Makefile (лечит боль #1 «ручной труд»)
+### ✅ Шаг B — Makefile (лечит боль #1 «ручной труд») — СДЕЛАНО
 
-📖 **Вводная перед реализацией:** [makefile-intro](2026-07-06-makefile-intro.md)
+📖 Вводная: [makefile-intro](2026-07-06-makefile-intro.md)
 
-Обернуть простыни `docker exec -e ... python scripts/...` в короткие команды.
+- [x] up/down/rebuild/logs/shell — инфраструктура
+- [x] corpus — копирование тестовых доков в контейнер (был ручной docker cp)
+- [x] ingest / ingest-hybrid / ocr — данные
+- [x] kg / testset / eval-dense / eval-hybrid — Ragas pipeline
+- [x] mlflow-ui / mlflow-stop — UI
+- [x] Ключ OpenRouter из `.env.eval` (не хардкод), модели через переменные
+- [x] `make help` — самодокументация
+- [x] Проверено: `make help`, `make -n ingest`, `make corpus` реально работают
 
-- [ ] `make up` / `make down` — поднять/погасить стек
-- [ ] `make ingest` — загрузка корпуса (dense)
-- [ ] `make ingest-hybrid` — загрузка в hybrid-коллекцию
-- [ ] `make ocr` — OCR картинок-PDF
-- [ ] `make kg` — построить knowledge graph
-- [ ] `make testset` — сгенерировать testset
-- [ ] `make eval-dense` / `make eval-hybrid` — прогоны
-- [ ] `make mlflow-ui` / `make jupyter` — поднять UI/notebook
-- [ ] Ключ OpenRouter подхватывать из `.env.eval` внутри Makefile (не хардкодить)
-
-**Готово когда:** весь пайплайн запускается через `make <target>`, а не копипастой
-длинных docker-команд.
+**Готово:** весь пайплайн через `make <target>` вместо копипасты docker-команд.
 
 ---
 
