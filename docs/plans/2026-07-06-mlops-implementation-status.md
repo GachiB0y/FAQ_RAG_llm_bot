@@ -64,6 +64,8 @@
 
 ### ⬜ Шаг C — Langfuse (лечит боль #4 «нет мониторинга») ⭐
 
+📖 **Вводная перед реализацией:** [langfuse-intro](2026-07-08-langfuse-intro.md)
+
 Self-hosted трейсинг каждого LLM-запроса.
 
 - [ ] Добавить Langfuse-сервисы в отдельный `docker-compose.langfuse.yml`
