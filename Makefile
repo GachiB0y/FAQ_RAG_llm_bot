@@ -8,10 +8,12 @@ CORPUS       := /tmp/corpus
 # ключ OpenRouter берём из .env.eval (в git не коммитится)
 OPENROUTER_KEY := $(shell grep '^OPENROUTER_API_KEY=' .env.eval 2>/dev/null | cut -d= -f2-)
 
-# модели по умолчанию (переопределяемы через make VAR=...)
-GEN_MODEL    ?= nvidia/nemotron-3-super-120b-a12b:free
-JUDGE_MODEL  ?= openai/gpt-oss-120b:free
-KG_MODEL     ?= google/gemma-4-31b-it:free
+# модели по умолчанию — платный cost/quality набор (3 разные семьи, судья независим).
+# ~$0.2-1.5 за цикл. Переопределяемы: make eval-dense GEN_MODEL=...
+# Обоснование выбора — docs/plans/2026-07-08-model-flow.md
+GEN_MODEL    ?= openai/gpt-4o-mini              # генератор (прод-репрезентативный)
+JUDGE_MODEL  ?= anthropic/claude-haiku-4.5      # судья (независимая семья, качество метрик)
+KG_MODEL     ?= google/gemini-2.5-flash-lite    # KG + testset (дёшево, много вызовов)
 TESTSET_SIZE ?= 15
 MAX_CHUNKS   ?= 80
 
