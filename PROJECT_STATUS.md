@@ -26,6 +26,7 @@
 - [ ] **A3** Langfuse — мониторинг запросов (боль #4) ⭐
 - [ ] **A4** DVC — версионирование данных/промптов (боль #2)
 - [ ] **A5** CI с Ragas — тесты качества в PR (боли #7, #3)
+- [ ] **A6** Prefect — оркестрация: retry на 429 + nightly eval (после A2). Интро: [prefect-intro](docs/plans/2026-07-06-prefect-intro.md)
 
 ### Линия B — Production-архитектура
 Роадмап: [production-tooling-roadmap](docs/plans/2026-07-02-production-tooling-roadmap.md)
