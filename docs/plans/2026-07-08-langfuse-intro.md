@@ -133,17 +133,53 @@ latency и стоимости.
 
 ---
 
-## 7. Langfuse vs MLflow (не дублируют)
+## 7. Langfuse vs MLflow — что куда класть (не дублируют)
 
 | | MLflow (есть) | Langfuse (внедряем) |
 |---|---|---|
+| Цель | выбрать лучшую конфигурацию RAG | следить за живой системой |
 | Фаза | 3-4 разработка (офлайн) | 7 прод (онлайн) |
-| Единица | прогон = весь eval-набор | трейс = один запрос юзера |
-| Стоимость запроса | не считает | считает $/запрос |
+| Единица | прогон = весь testset (15-20 вопросов разом) | трейс = 1 запрос юзера |
+| Стоимость запроса | не считает (не про деньги) | считает $/запрос |
 | Фокус | «какая конфигурация лучше» | «что сейчас с живой системой» |
 
-Аналогия: MLflow ≈ тесты перед релизом, Langfuse ≈ Sentry/Grafana в проде.
-Нужны оба, на разных этапах.
+### Что кладём в MLflow
+- **Params:** retrieval_mode, generator_model, judge_model, embedding_model, chunk_size, top_k, dataset_size
+- **Metrics:** mean_faithfulness / answer_relevancy / context_precision / context_recall + срезы by_synth
+- **Tags:** git_commit, dataset_version, purpose
+- **Artifacts:** eval_results.csv, графики, снапшот testset
+- НЕ кладём: веса моделей (не обучаем — модели это имена в params), живые запросы
+
+### Что кладём в Langfuse
+- **Traces:** каждый живой запрос (вопрос → retrieval → generation → ответ)
+- **Per-request:** latency, токены, стоимость $, модель
+- **user_id / session_id:** кто спрашивал, диалоги
+- **Scores:** online-eval (faithfulness на семпле), 👍/👎 юзеров
+- НЕ кладём: фиксированный testset, конфиги экспериментов (это MLflow)
+
+### Шпаргалка «что куда»
+```
+Прогнал eval на testset?      → MLflow
+Сравниваешь dense vs hybrid?  → MLflow (Compare)
+Подбираешь chunk_size/top_k?  → MLflow (прогон на вариант)
+   ─────────
+Живой юзер задал вопрос?      → Langfuse (trace)
+Сколько стоил запрос в $?     → Langfuse
+Кто что спрашивал?            → Langfuse (user_id)
+Latency/качество в проде?     → Langfuse
+```
+
+### Датасеты — где живут
+`testset_auto.json` (golden-вопросы) = файл, версионируется git/DVC. В MLflow —
+только ссылка (`dataset_version`), не сами данные. Langfuse держит живой трафик,
+а не testset. **Петля (Фаза 8):** плохие ответы из Langfuse (👎) → добавляем в
+testset → снова гоняем в MLflow.
+
+### Аналогия
+- **MLflow** = журнал экзаменов (какая версия системы сколько баллов на тесте)
+- **Langfuse** = камеры + счётчик в реальном магазине (кто пришёл, что спросил, почём)
+
+Одно про **выбор** системы до запуска, другое про **наблюдение** в работе. Нужны оба.
 
 ---
 
