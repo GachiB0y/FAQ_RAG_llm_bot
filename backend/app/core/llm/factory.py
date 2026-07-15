@@ -8,7 +8,10 @@ def create_llm_adapter(settings: Settings) -> BaseLLMAdapter:
     if settings.LLM_PROVIDER == "openai":
         if not settings.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is required for OpenAI provider")
-        return OpenAIAdapter(api_key=settings.OPENAI_API_KEY)
+        return OpenAIAdapter(
+            api_key=settings.OPENAI_API_KEY,
+            model=settings.RAG_GENERATOR_MODEL,
+        )
 
     if settings.LLM_PROVIDER == "ollama":
         return OllamaAdapter(

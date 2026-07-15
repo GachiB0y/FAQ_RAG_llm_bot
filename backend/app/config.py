@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3:1.7b"
+    # Модель генератора для openai-провайдера (bare OpenAI id, НЕ OpenRouter-слаг!).
+    # Единый источник имени для прод-openai-пути вместо хардкода в адаптере.
+    # NB: прод сейчас идёт через ollama (LLM_PROVIDER=ollama в docker-compose) — openai-путь
+    # спящий. Прод на qwen/qwen3.6 через OpenRouter — B-линия (нужен OpenRouter/vLLM провайдер).
+    RAG_GENERATOR_MODEL: str = "gpt-4o-mini"
 
     # Embeddings
     EMBEDDING_PROVIDER: Literal["openai", "ollama"] = "openai"

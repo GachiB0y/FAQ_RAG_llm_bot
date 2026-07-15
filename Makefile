@@ -1,26 +1,25 @@
 # FAQ RAG Bot — команды-ярлыки.
 # Запуск: make <цель>. Список: make help.
 #
-# Модели можно переопределять: make eval-dense JUDGE_MODEL=google/gemma-4-31b-it:free
+# Модели можно переопределять: make eval-dense JUDGE_MODEL=openai/gpt-5.4
 
 BACKEND      := faq_rag_llm_bot-backend-1
 CORPUS       := /tmp/corpus
 # ключ OpenRouter берём из .env.eval (в git не коммитится)
 OPENROUTER_KEY := $(shell grep '^OPENROUTER_API_KEY=' .env.eval 2>/dev/null | cut -d= -f2-)
 
-# модели по умолчанию — платный cost/quality набор (3 разные семьи, судья независим).
-# ~$0.2-1.5 за цикл. Переопределяемы: make eval-dense GEN_MODEL=...
-# Обоснование выбора — docs/plans/2026-07-08-model-flow.md
-GEN_MODEL    ?= openai/gpt-4o-mini              # генератор (прод-репрезентативный)
-JUDGE_MODEL  ?= anthropic/claude-haiku-4.5      # судья (независимая семья, качество метрик)
-KG_MODEL     ?= google/gemini-2.5-flash-lite    # KG + testset (дёшево, много вызовов)
+# модели пула — единственный источник в backend/models.env (см. комментарии там).
+# ~$0.4-1.5 за цикл eval (судья = ~95% стоимости). Обоснование — docs/plans/2026-07-08-model-flow.md
+# Переопределение на прогон: make eval-dense GEN_MODEL=... (CLI старше include).
+include backend/models.env
 TESTSET_SIZE ?= 15
 MAX_CHUNKS   ?= 80
 
-# общий набор env для eval-прогонов (не дублируем в каждой цели)
+# общий набор env для eval-прогонов (не дублируем в каждой цели).
+# Имена env — ролевые: JUDGE и KG больше не делят одну переменную OPENROUTER_MODEL.
 EVAL_ENV = -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e DATASET_SOURCE=json \
 	-e GENERATOR_PROVIDER=openrouter -e OPENROUTER_GEN_MODEL="$(GEN_MODEL)" \
-	-e JUDGE_PROVIDER=openrouter -e OPENROUTER_MODEL="$(JUDGE_MODEL)"
+	-e JUDGE_PROVIDER=openrouter -e OPENROUTER_JUDGE_MODEL="$(JUDGE_MODEL)"
 
 .PHONY: help up down rebuild logs shell corpus ingest ingest-hybrid ocr kg testset \
 	eval-dense eval-hybrid mlflow-ui mlflow-stop
@@ -64,11 +63,11 @@ ocr: ## OCR картинок-PDF через Tesseract (rus)
 # ─────────────── Ragas pipeline ───────────────
 kg: ## Построить knowledge graph (OpenRouter)
 	docker exec -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e MAX_CHUNKS_PER_DOC=$(MAX_CHUNKS) \
-	  -e OPENROUTER_MODEL="$(KG_MODEL)" $(BACKEND) python -u scripts/generate_kg.py
+	  -e OPENROUTER_KG_MODEL="$(KG_MODEL)" $(BACKEND) python -u scripts/generate_kg.py
 
 testset: ## Сгенерировать testset (OpenRouter)
 	docker exec -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e TESTSET_SIZE=$(TESTSET_SIZE) \
-	  -e OPENROUTER_MODEL="$(KG_MODEL)" $(BACKEND) python -u scripts/generate_testset.py
+	  -e OPENROUTER_KG_MODEL="$(KG_MODEL)" $(BACKEND) python -u scripts/generate_testset.py
 
 eval-dense: ## Прогон Ragas eval — dense retrieval
 	docker exec $(EVAL_ENV) $(BACKEND) python -u scripts/eval_rag.py

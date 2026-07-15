@@ -63,14 +63,14 @@ DATASET_SOURCE = os.environ.get("DATASET_SOURCE", "manual")
 DATASET_PATH = os.environ.get("DATASET_PATH", "/app/tests/eval/testset_auto.json")
 
 # Генератор RAG: провайдер через env-флаг.
-# - ollama: локальный (наш прод-RAG), но qwen3:1.7b reasoning-модель регулярно зависает
-# - openrouter: внешняя модель (nemotron-3-super-120b и др.), стабильно но другой класс
+# - ollama: локальный (dev), но qwen3:1.7b reasoning-модель регулярно зависает
+# - openrouter: модель из backend/models.env (GEN_MODEL), стабильно
 GENERATOR_PROVIDER = os.environ.get("GENERATOR_PROVIDER", "ollama")
 
 OLLAMA_GEN_MODEL = os.environ.get("OLLAMA_GEN_MODEL", "qwen3:1.7b")
-OPENROUTER_GEN_MODEL = os.environ.get(
-    "OPENROUTER_GEN_MODEL", "nvidia/nemotron-3-super-120b-a12b:free"
-)
+# Модель генератора (OpenRouter) — из backend/models.env через Makefile (env).
+# Своего дефолта НЕТ: нет env → падаем в make_rag_llm.
+OPENROUTER_GEN_MODEL = os.environ.get("OPENROUTER_GEN_MODEL", "")
 EMBEDDING_MODEL = "bge-m3"
 TOP_K = 5
 
@@ -79,9 +79,9 @@ JUDGE_PROVIDER = os.environ.get("JUDGE_PROVIDER", "openrouter")
 
 # Для OpenRouter:
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get(
-    "OPENROUTER_MODEL", "google/gemma-4-31b-it:free"
-)
+# Модель судьи — из backend/models.env через Makefile (env). Своего дефолта НЕТ:
+# нет env → падаем в make_judge_llm (никакой тихо подхваченной стухшей модели).
+OPENROUTER_JUDGE_MODEL = os.environ.get("OPENROUTER_JUDGE_MODEL", "")
 
 # Для Ollama (fallback):
 OLLAMA_JUDGE_MODEL = os.environ.get("OLLAMA_JUDGE_MODEL", "qwen2.5:7b")
@@ -92,6 +92,11 @@ def make_judge_llm():
         if not OPENROUTER_API_KEY:
             raise RuntimeError(
                 "OPENROUTER_API_KEY не задан — пробрось через env при запуске docker exec"
+            )
+        if not OPENROUTER_JUDGE_MODEL:
+            raise RuntimeError(
+                "OPENROUTER_JUDGE_MODEL не задан — задай JUDGE_MODEL в backend/models.env "
+                "(запуск через make) или пробрось env вручную"
             )
         from langchain_core.rate_limiters import InMemoryRateLimiter
         from langchain_openai import ChatOpenAI
@@ -106,7 +111,7 @@ def make_judge_llm():
             ChatOpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=OPENROUTER_API_KEY,
-                model=OPENROUTER_MODEL,
+                model=OPENROUTER_JUDGE_MODEL,
                 temperature=0,
                 timeout=60,
                 max_retries=5,
@@ -279,6 +284,11 @@ def make_rag_llm():
     if GENERATOR_PROVIDER == "openrouter":
         if not OPENROUTER_API_KEY:
             raise RuntimeError("OPENROUTER_API_KEY не задан")
+        if not OPENROUTER_GEN_MODEL:
+            raise RuntimeError(
+                "OPENROUTER_GEN_MODEL не задан — задай GEN_MODEL в backend/models.env "
+                "(запуск через make) или пробрось env вручную"
+            )
         from llama_index.llms.openai_like import OpenAILike
         return OpenAILike(
             api_base="https://openrouter.ai/api/v1",
@@ -324,7 +334,7 @@ def main() -> None:
         retriever = QdrantRetriever(QDRANT_URL, rag_emb)
 
     judge_label = (
-        f"openrouter/{OPENROUTER_MODEL}"
+        f"openrouter/{OPENROUTER_JUDGE_MODEL}"
         if JUDGE_PROVIDER == "openrouter"
         else f"ollama/{OLLAMA_JUDGE_MODEL}"
     )
@@ -395,7 +405,7 @@ def main() -> None:
     mlflow.set_experiment("ragas-eval")
 
     judge_short = (
-        OPENROUTER_MODEL.split("/")[-1]
+        OPENROUTER_JUDGE_MODEL.split("/")[-1]
         if JUDGE_PROVIDER == "openrouter"
         else OLLAMA_JUDGE_MODEL
     )
@@ -417,7 +427,7 @@ def main() -> None:
                 "embedding_model": EMBEDDING_MODEL,
                 "judge_provider": JUDGE_PROVIDER,
                 "judge_model": (
-                    OPENROUTER_MODEL
+                    OPENROUTER_JUDGE_MODEL
                     if JUDGE_PROVIDER == "openrouter"
                     else OLLAMA_JUDGE_MODEL
                 ),
