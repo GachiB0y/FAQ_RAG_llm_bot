@@ -19,16 +19,27 @@
 
 ## 🤖 МОДЕЛИ ПРОЕКТА (текущий набор)
 
-Платный cost/quality набор через OpenRouter (3 разные семьи, судья независим).
-Обоснование + цены: [model-flow](docs/plans/2026-07-08-model-flow.md). Дефолты — в Makefile.
+Платный cost/quality набор через OpenRouter (3 разные семьи, судья независим от
+генератора → нет self-preference bias). Всё через один ключ OpenRouter — ключ
+Anthropic не нужен. Обновлено 2026-07-10 (свежие модели на июль 2026).
+Обоснование + цены: [model-flow](docs/plans/2026-07-08-model-flow.md).
+**Единый источник имён моделей — `backend/models.env`** (Makefile его `include`-ит,
+скрипты получают через env и своих дефолтов не имеют). Прод-openai-путь — в `Settings.RAG_GENERATOR_MODEL`.
 
-| Роль | Модель | Где |
-|---|---|---|
-| RAG-генератор (отвечает юзерам, в прод) | `openai/gpt-4o-mini` | OpenRouter |
-| Судья (eval) | `anthropic/claude-haiku-4.5` | OpenRouter |
-| KG + testset | `google/gemini-2.5-flash-lite` | OpenRouter |
-| Эмбеддинги | `bge-m3` | локально (Ollama) |
-| OCR | Tesseract | локально |
+| Роль | Модель | Семья | Где | Цена $/1M (in/out) |
+|---|---|---|---|---|
+| RAG-генератор (отвечает юзерам, в прод) | `qwen/qwen3.6` ¹ | Alibaba (кит.) | OpenRouter | ~0.32 / 1.28 |
+| Судья (eval) | `openai/gpt-5.4` (полная, не mini!) | OpenAI | OpenRouter | 2.50 / 15 |
+| KG + testset | `google/gemini-3.1-flash-lite` | Google | OpenRouter | 0.25 / 1.50 |
+| Эмбеддинги | `bge-m3` | — | локально (Ollama) | — |
+| OCR | Tesseract | — | локально | — |
+
+> ¹ Генератор `qwen/qwen3.6` — хороший русский (201 язык). Точный вариант (`-plus`/
+> размер) уточнить на openrouter.ai. Дешёвая альтернатива — `deepseek/deepseek-v4-flash`
+> (~0.14/0.28), но русский слабее → **прогнать 10–15 вопросов ФПСР глазами до фиксации**.
+> Если русский «плывёт» на юр-терминологии — fallback генератор `google/gemini-3.1-flash`.
+> Судья намеренно ПОЛНАЯ GPT (не mini): он определяет доверие к метрикам, гоняется только
+> на eval (объём мал → цена ~$1.3/прогон на 30 вопросах). Урок 30.06 про self-bias судьи.
 
 > Генератор можно вынести в локальный контур (vLLM на GPU) сменой 2 строк конфига —
 > см. model-flow §5.1. Архитектура готова (OpenAI-совместимый API).
@@ -41,7 +52,15 @@
 Лечим «7 болей ML». Анализ: [mlops-maturity-analysis](docs/plans/2026-07-06-mlops-maturity-analysis.md)
 - [x] **A1** `uv` + lockfile (боль #5 — окружение) ✅ 2026-07-08
 - [x] **A2** Makefile ✅ 2026-07-08 — (боль #1 — ручной труд)
-- [ ] **A3** Langfuse — мониторинг запросов (боль #4) ⭐
+- [ ] **A3** Langfuse — мониторинг запросов + фактическая стоимость токенов (боль #4) ⭐
+  - [ ] **A3.1** Инструментировать ОБА узла: генератор (LlamaIndex `OpenAILike`) и судью
+        (LangChain `ChatOpenAI` в Ragas) через Langfuse callback. Судья = ~95% стоимости —
+        без него цифра бессмысленна.
+  - [ ] **A3.2** Задать custom model prices для OpenRouter-имён (`qwen/…`, `openai/…`,
+        `google/…`) в Langfuse UI — иначе cost покажет $0 (токены есть, прайса в справочнике нет).
+  - [ ] **A3.3** После первого прогона eval — сверить cost из Langfuse с activity-дашбордом
+        OpenRouter (ground truth). Сойдётся → доверяем Langfuse; $0 → не задан прайс (см. A3.2).
+  - [ ] (следствие) `user_id` = telegram id в трейсах → фундамент под демо E1
 - [ ] **A4** DVC — версионирование данных/промптов (боль #2)
 - [ ] **A5** CI с Ragas — тесты качества в PR (боли #7, #3)
 - [ ] **A6** Prefect — оркестрация: retry на 429 + nightly eval (после A2). Интро: [prefect-intro](docs/plans/2026-07-06-prefect-intro.md)
@@ -51,11 +70,19 @@
 - [ ] **B1** vLLM — прод-инференс вместо Ollama
 - [ ] **B2** LangGraph — agentic RAG (главный тренд 2026)
 - [ ] **B3** pgvector — проверить, нужна ли отдельная векторка
-- [ ] **B4** 🎯 Выбор прод-модели генератора: сравнить `gpt-4o-mini` (OpenRouter)
-      vs локальную `qwen` (и др. кандидатов) на ОДНОМ testset через Ragas+MLflow →
-      убедиться что лучше по цена/качество. Плюс поиграться с параметрами
-      прод-модели (chunk_size, top_k, temperature, prompt) → зафиксировать
-      прод-конфиг с доказательством в MLflow. Цель — обоснованный выбор, не «наугад»
+- [ ] **B4** 🎯 Доказать выбор прод-генератора на данных: гоняем `qwen/qwen3.6`
+      (текущий выбор) против кандидатов — `deepseek/deepseek-v4-flash` (дешевле),
+      `google/gemini-3.1-flash` (fallback), локальная модель через vLLM/Ollama —
+      на ОДНОМ testset через Ragas+MLflow, судья `openai/gpt-5.4`. Убедиться что
+      выбор лучший по цена/качество (в т.ч. русский на юр-терминологии ФПСР). Плюс
+      поиграться с параметрами (chunk_size, top_k, temperature, prompt) → зафиксировать
+      прод-конфиг с доказательством в MLflow. Цель — обоснованный выбор, не «наугад».
+      Оценка стоимости: ~$13 (≈10 прогонов судьи на 30 вопросах) — см. Langfuse (A3) для факта
+- [ ] **B5** (опц., прод) **Promptfoo** — стенд для red-team / prompt-injection тестов:
+      прогнать пачку атак против бота и проверить, что guard из **E4** их ловит. Плюс
+      быстрые side-by-side сравнения промптов/моделей (частично пересекается с B4).
+      Наш eval-стек (Ragas+MLflow+Langfuse) это не покрывает — Promptfoo добавляет
+      именно security-тестирование. Для демо не нужен, кандидат в прод.
 
 ### Линия C — Отложенное из первоначального плана
 - [ ] **C1** MLflow как сервис в docker-compose (частично закрывается линией A)
@@ -76,6 +103,13 @@
       живой интерактив: коллеги задают вопросы боту прямо на презентации
 - [ ] **E3** (следствие) убедиться что RAG стабилен под несколько параллельных
       юзеров — связано с serving (см. Линия B)
+- [ ] **E4** 🔒 Security Gateway перед `RAGEngine.query` — первый user-facing контур
+      закрываем защитным слоем из статьи об архитектуре AI-агентов. Дизайн утверждён,
+      реализация позже: [security-gateway-design](docs/superpowers/specs/2026-07-14-security-gateway-design.md)
+  - [ ] rate-limit 10 запросов/день на `user_id` (Redis) — защита бюджета/DoS
+  - [ ] prompt-injection guard: правила (fast-path) + дешёвый LLM на спорных
+  - [ ] видимость: лог решений + `/api/v1/gateway/stats` (сколько атак отбито)
+  - [ ] (прод-потом) allowlist / PII-маскирование / кэш / авто-фолбэк модели
 
 ---
 
@@ -96,6 +130,7 @@
 | 02.07 | Роадмап production-инструментов 2026 (vLLM, LangGraph, pgvector, Langfuse) | [production-tooling-roadmap](docs/plans/2026-07-02-production-tooling-roadmap.md) |
 | 06.07 | Анализ MLOps-зрелости (7 болей) + пошаговый трекер внедрения (uv→Makefile→Langfuse→DVC→CI). Вводные доки по uv/Makefile/Prefect. Скилл `tracking-experiments-with-mlflow` | [mlops-maturity-analysis](docs/plans/2026-07-06-mlops-maturity-analysis.md), [mlops-implementation-status](docs/plans/2026-07-06-mlops-implementation-status.md) |
 | 08.07 | **A1 (uv)**: pyproject+eval-группа, uv.lock (214 пакетов), Dockerfile на `uv sync`, OCR в образ, venv→/opt/venv (фикс bind-mount). **A2 (Makefile)**: весь пайплайн через `make <target>` | [mlops-implementation-status](docs/plans/2026-07-06-mlops-implementation-status.md) |
+| 14.07 | Разбор статьи «Архитектура надёжных AI-агентов» → gap-анализ проекта. Главный пробел — защитный слой **Gateway (безопасность)**. Спроектирован Security Gateway для демо-бота (rate-limit + injection-guard), спека утверждена → задача **E4** | [security-gateway-design](docs/superpowers/specs/2026-07-14-security-gateway-design.md) |
 
 **Ключевой результат экспериментов:** на нашем корпусе (bge-m3 + документы ФПСР)
 hybrid search **не даёт значимого преимущества** — dense достаточен. Главный урок —
