@@ -231,7 +231,17 @@ git commit -m "infra(langfuse): compose (port 3001) + Makefile targets + Setting
 
 ---
 
-### Task 2: Модуль `observability.py` + unit-тесты
+### Task 2: Модуль `observability.py` + unit-тесты ✅ ВЫПОЛНЕНО 2026-07-15
+
+> **Факты (2026-07-15):** модуль написан под фактический v3-API (`start_as_current_span`,
+> `update_current_trace`, `get_current_trace_id`, `create_score`, `flush`). Генератор —
+> через `openinference-instrumentation-llama-index` (v4.4.3, добавлен в deps+lock), т.к.
+> `langfuse.llama_index` в v3 удалён. 8 unit-тестов зелёные (флаг-off no-op + enabled через
+> fake-client). Enabled-путь проверен end-to-end против живого Langfuse: трейс с
+> user_id/session_id/tags/metadata + Scores долетел (environment=eval подхватился из env).
+> Пред-существующий `test_config::test_settings_loads_defaults` падает в контейнере из-за
+> env-оверрайдов docker-compose (LLM_PROVIDER=ollama, SIMILARITY_THRESHOLD=0.5) — НЕ связан
+> с A3, не трогаем.
 
 Ядро фичи: единственная точка Langfuse-логики. TDD. Флаг-off = прозрачный no-op — это и есть главное проверяемое свойство. Deliverable: модуль с проходящими unit-тестами.
 
