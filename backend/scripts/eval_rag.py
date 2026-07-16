@@ -21,6 +21,7 @@ UI MLflow (отдельно, один раз):
 
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, "/app")
 
@@ -336,11 +337,15 @@ def main() -> None:
         secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
         host=os.environ.get("LANGFUSE_HOST"),
     )
-    # session_id связывает Langfuse-трейсы с прогоном (логируем как MLflow-param ниже).
-    # PID уникализирует прогон между запусками (Date/random не нужны).
-    lf_session_id = f"{DATASET_SOURCE}-{RETRIEVAL_MODE}-pid{os.getpid()}"
     gen_model_name = OPENROUTER_GEN_MODEL if GENERATOR_PROVIDER == "openrouter" else OLLAMA_GEN_MODEL
     judge_model_name = OPENROUTER_JUDGE_MODEL if JUDGE_PROVIDER == "openrouter" else OLLAMA_JUDGE_MODEL
+    # Человекочитаемый session_id: что(eval)-как(mode)-чем(генератор)-когда(timestamp).
+    # Timestamp даёт и уникальность между прогонами, и понятность. Связь с MLflow —
+    # этот id логируется как MLflow-param langfuse_session_id (см. ниже).
+    lf_session_id = (
+        f"eval-{RETRIEVAL_MODE}-{gen_model_name.split('/')[-1]}"
+        f"-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    )
 
     # Embeddings всегда локальные через Ollama (bge-m3) — быстро, без API-нагрузки.
     rag_adapter = OllamaAdapter(
