@@ -26,3 +26,16 @@ def test_gateway_defaults():
     assert s.INJECTION_GUARD_LLM_ENABLED is False
     assert s.INJECTION_GUARD_MODEL == "google/gemini-3.1-flash-lite"
     assert s.OPENROUTER_API_KEY is None
+
+
+def test_openrouter_generator_defaults():
+    from app.config import Settings
+    s = Settings(
+        DATABASE_URL="postgresql+asyncpg://x",
+        REDIS_URL="redis://x",
+        QDRANT_URL="http://x",
+        JWT_SECRET="secret",
+        LLM_PROVIDER="openrouter",
+    )
+    assert s.LLM_PROVIDER == "openrouter"
+    assert s.OPENROUTER_GEN_MODEL == "qwen/qwen3.6-plus"
