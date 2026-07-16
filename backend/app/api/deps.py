@@ -11,6 +11,10 @@ from app.services.auth_service import AuthService
 from app.models.user import User
 from app.core.rag import RAGEngine
 from app.core.llm import create_llm_adapter
+from app.core.gateway.gateway import SecurityGateway
+from app.core.gateway.rate_limiter import RateLimiter
+from app.core.gateway.injection import InjectionGuard
+from app.core.gateway.classifier import build_openrouter_classifier
 
 security = HTTPBearer()
 
@@ -82,3 +86,13 @@ def get_rag_engine(settings: Annotated[Settings, Depends(get_settings_dep)]) -> 
 
 def get_session_id(x_session_id: str | None = Header(None)) -> str | None:
     return x_session_id
+
+
+def get_gateway(
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+) -> SecurityGateway:
+    rate_limiter = RateLimiter(redis_client, settings.RATE_LIMIT_PER_DAY)
+    classifier = build_openrouter_classifier(settings)
+    guard = InjectionGuard(classifier=classifier)
+    return SecurityGateway(rate_limiter, guard, redis_client)

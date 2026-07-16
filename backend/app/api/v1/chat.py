@@ -1,16 +1,20 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_current_user,
+    get_gateway,
     get_rag_engine,
     get_redis,
     get_session_id,
+    get_settings_dep,
 )
 from app.database import get_db
 from app.models.user import User
+from app.config import Settings
+from app.core.gateway.gateway import SecurityGateway, gateway_applies
 from app.core.rag import RAGEngine
 from app.core.observability import trace_context, prompt_hash
 from app.core.rag.engine import SYSTEM_PROMPT
@@ -36,11 +40,27 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 async def chat(
     data: ChatRequest,
     user: Annotated[User, Depends(get_current_user)],
+    gateway: Annotated[SecurityGateway, Depends(get_gateway)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
     rag: Annotated[RAGEngine, Depends(get_rag_engine)],
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
     session_id: Annotated[str | None, Depends(get_session_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    x_gateway_bypass: Annotated[str | None, Header()] = None,
 ):
+    if gateway_applies(settings.GATEWAY_ENABLED, user.role.value, x_gateway_bypass):
+        decision = await gateway.check(str(user.id), data.message)
+        if not decision.allowed:
+            if decision.reason == "rate_limited":
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Дневной лимит запросов исчерпан, попробуйте завтра",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Не могу обработать этот запрос",
+            )
+
     session_mgr = SessionManager(redis_client)
 
     # Redis: manage hot context for RAG (unchanged)
