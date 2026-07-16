@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_HOST: str = "http://localhost:3001"
 
+    # Security Gateway (E4) — docs/superpowers/specs/2026-07-14-security-gateway-design.md
+    GATEWAY_ENABLED: bool = True
+    RATE_LIMIT_PER_DAY: int = 10
+    INJECTION_GUARD_LLM_ENABLED: bool = False
+    INJECTION_GUARD_MODEL: str = "google/gemini-3.1-flash-lite"
+    OPENROUTER_API_KEY: Optional[str] = None
+
     # Upload
     UPLOAD_DIR: str = "/app/uploads"
     MAX_FILE_SIZE_MB: int = 50
