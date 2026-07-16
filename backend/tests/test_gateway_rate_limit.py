@@ -1,7 +1,5 @@
 from datetime import date
 
-import pytest
-
 from app.core.gateway.rate_limiter import RateLimiter
 from tests.conftest import FakeRedis
 
