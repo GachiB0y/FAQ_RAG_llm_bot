@@ -14,7 +14,10 @@ def test_settings_loads_defaults():
     assert settings.SIMILARITY_THRESHOLD == 0.7
 
 
-def test_gateway_defaults():
+def test_gateway_defaults(monkeypatch):
+    # OPENROUTER_API_KEY теперь задаётся в docker-compose (M1, значение может быть пустым) —
+    # чтобы проверить именно ДЕФОЛТ поля, убираем возможную переменную окружения.
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     s = Settings(
         DATABASE_URL="postgresql+asyncpg://x",
         REDIS_URL="redis://x",
