@@ -12,6 +12,8 @@ from app.api.deps import (
 from app.database import get_db
 from app.models.user import User
 from app.core.rag import RAGEngine
+from app.core.observability import trace_context, prompt_hash
+from app.core.rag.engine import SYSTEM_PROMPT
 from app.core.session import SessionManager
 from app.schemas.chat import (
     ChatRequest,
@@ -51,7 +53,18 @@ async def chat(
 
     history = await session_mgr.get_history(session_id)
 
-    result = rag.query(data.message, chat_history=history)
+    with trace_context(
+        user_id=str(user.id),
+        session_id=session_id,
+        tags=["dense"],
+        metadata={"prompt_hash": prompt_hash(SYSTEM_PROMPT)},
+    ) as trace:
+        result = rag.query(data.message, chat_history=history)
+        trace.update(metadata={
+            "confidence": result["confidence"],
+            "sources_count": len(result["sources"]),
+            "not_found": result["confidence"] < rag.similarity_threshold,
+        })
 
     # PostgreSQL: persist messages permanently (atomic pair, durable first)
     conversation = await get_or_create_conversation(user.id, db)

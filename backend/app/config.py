@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.7
     TOP_K_RESULTS: int = 5
 
+    # Observability (Langfuse) — docs/superpowers/specs/2026-07-15-langfuse-observability-design.md
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "http://localhost:3001"
+
     # Upload
     UPLOAD_DIR: str = "/app/uploads"
     MAX_FILE_SIZE_MB: int = 50
