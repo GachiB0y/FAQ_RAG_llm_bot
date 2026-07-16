@@ -39,6 +39,14 @@ from ragas.metrics import (
 from ragas.run_config import RunConfig
 
 from app.core.llm.ollama import OllamaAdapter
+from app.core.observability import (
+    flush as obs_flush,
+    init_observability,
+    langchain_callbacks,
+    prompt_hash,
+    push_scores,
+    trace_context,
+)
 from app.core.rag.engine import SYSTEM_PROMPT
 from app.core.rag.retriever import QdrantRetriever
 
@@ -85,6 +93,11 @@ OPENROUTER_JUDGE_MODEL = os.environ.get("OPENROUTER_JUDGE_MODEL", "")
 
 # Для Ollama (fallback):
 OLLAMA_JUDGE_MODEL = os.environ.get("OLLAMA_JUDGE_MODEL", "qwen2.5:7b")
+
+# Langfuse observability (A3). Выключен по умолчанию → трейсы не шлём.
+# Включить прогон с трейсами: make eval-dense LANGFUSE_ENABLED=true
+LANGFUSE_ENABLED = os.environ.get("LANGFUSE_ENABLED", "false").lower() in {"1", "true", "yes"}
+GIT_COMMIT = os.environ.get("GIT_COMMIT", "unknown")
 
 
 def make_judge_llm():
@@ -317,6 +330,18 @@ def main() -> None:
     print(f">> RAG generator: {gen_label}  emb: ollama/{EMBEDDING_MODEL}")
     rag_llm = make_rag_llm()
 
+    init_observability(
+        LANGFUSE_ENABLED,
+        public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
+        secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
+        host=os.environ.get("LANGFUSE_HOST"),
+    )
+    # session_id связывает Langfuse-трейсы с прогоном (логируем как MLflow-param ниже).
+    # PID уникализирует прогон между запусками (Date/random не нужны).
+    lf_session_id = f"{DATASET_SOURCE}-{RETRIEVAL_MODE}-pid{os.getpid()}"
+    gen_model_name = OPENROUTER_GEN_MODEL if GENERATOR_PROVIDER == "openrouter" else OLLAMA_GEN_MODEL
+    judge_model_name = OPENROUTER_JUDGE_MODEL if JUDGE_PROVIDER == "openrouter" else OLLAMA_JUDGE_MODEL
+
     # Embeddings всегда локальные через Ollama (bge-m3) — быстро, без API-нагрузки.
     rag_adapter = OllamaAdapter(
         base_url=OLLAMA_URL,
@@ -358,22 +383,40 @@ def main() -> None:
             cached = json.load(f)
         samples = cached["samples"]
         synthesizers = cached.get("synthesizers", [""] * len(samples))
+        # Из кэша генерация не прогонялась → трейсов генератора нет.
+        # Для Langfuse-прогона запускай свежим (SKIP_CACHE=true или удали кэш).
+        lf_trace_ids = [None] * len(samples)
         print(f"   {len(samples)} samples (skip RAG phase)")
     else:
         print(f">> Прогон RAG на {len(items)} вопросах...")
         samples = []
         synthesizers = []
+        lf_trace_ids = []
         failed_indices = []
         for i, item in enumerate(items, 1):
             q_preview = item["question"][:80] + ("…" if len(item["question"]) > 80 else "")
             print(f"   [{i}/{len(items)}] {q_preview}")
-            try:
-                answer, contexts = run_rag(item["question"], retriever, rag_llm)
-            except Exception as e:
-                print(f"      [!] FAIL: {type(e).__name__}: {str(e)[:120]}")
-                failed_indices.append(i)
-                answer = "[Ошибка генерации: вопрос не отвечен]"
-                contexts = []
+            with trace_context(
+                user_id=f"eval:{item.get('synthesizer_name', '')}:{i}",
+                session_id=lf_session_id,
+                tags=[RETRIEVAL_MODE],
+                metadata={
+                    "generator_model": gen_model_name,
+                    "judge_model": judge_model_name,
+                    "top_k": TOP_K,
+                    "git_commit": GIT_COMMIT,
+                    "prompt_hash": prompt_hash(SYSTEM_PROMPT),
+                },
+            ) as trace:
+                try:
+                    answer, contexts = run_rag(item["question"], retriever, rag_llm)
+                except Exception as e:
+                    print(f"      [!] FAIL: {type(e).__name__}: {str(e)[:120]}")
+                    failed_indices.append(i)
+                    answer = "[Ошибка генерации: вопрос не отвечен]"
+                    contexts = []
+                trace.update(metadata={"chunks": len(contexts)})
+            lf_trace_ids.append(trace.id)
             samples.append(
                 {
                     "user_input": item["question"],
@@ -436,6 +479,7 @@ def main() -> None:
                 "dataset_source": DATASET_SOURCE,
                 "dataset_path": DATASET_PATH if DATASET_SOURCE == "json" else "<inline>",
                 "dataset_size": len(items),
+                "langfuse_session_id": lf_session_id,
             }
         )
 
@@ -457,6 +501,8 @@ def main() -> None:
             show_progress=True,
             # NaN на упавших Job-ах — лучше чем потерять весь прогон.
             raise_exceptions=False,
+            # Langfuse-колбэк судьи (пусто при выключенном флаге) → трейсы+cost судьи.
+            callbacks=langchain_callbacks(),
         )
 
         df = result.to_pandas()
@@ -486,6 +532,17 @@ def main() -> None:
         numeric_cols = [c for c in df.columns if df[c].dtype.kind in "fi"]
         for col in numeric_cols:
             print(f"  {col:35s} mean = {df[col].dropna().mean():.3f}")
+
+        # Ragas-метрики по каждому вопросу → Scores на соответствующий трейс генератора.
+        # Только для свежего прогона (из кэша trace_id нет — см. кэш-ветку выше).
+        if any(lf_trace_ids) and len(lf_trace_ids) == len(df):
+            for idx, tid in enumerate(lf_trace_ids):
+                if not tid:
+                    continue
+                row = df.iloc[idx]
+                push_scores(tid, {c: row[c] for c in numeric_cols})
+            print(">> Scores отправлены в Langfuse")
+        obs_flush()
 
         print(f"\n>> MLflow run_id: {run.info.run_id}")
         print(f">> CSV артефакт: {out_csv}")

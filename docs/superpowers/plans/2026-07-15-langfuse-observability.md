@@ -454,7 +454,14 @@ git commit -m "feat(obs): модуль observability (флаг-off no-op) + unit
 
 ---
 
-### Task 3: Инструментация eval-контура
+### Task 3: Инструментация eval-контура ✅ ВЫПОЛНЕНО 2026-07-16
+
+> **Факты (2026-07-16):** `eval_rag.py` инструментирован. Отклонение от плана (чище):
+> `lf_trace_id` держим ОТДЕЛЬНЫМ списком `lf_trace_ids`, а НЕ кладём в `samples` — тогда
+> кэш RAG-ответов и `EvaluationDataset.from_list(samples)` остаются нетронутыми (иначе в
+> кэш попадали бы stale trace_id от прошлого прогона). Step 4 плана (clean_samples) стал не
+> нужен. Кэш-ветка: `lf_trace_ids=[None]*len` → из кэша Scores не шлём (трейсов генератора
+> нет). Синтаксис/импорт проверены, флаг-off по умолчанию. Реальный прогон — Task 5.
 
 Обернуть RAG-цикл в `trace_context`, прокинуть judge-колбэки в `ragas.evaluate`, повесить Ragas-метрики как Scores. Deliverable: включённый прогон eval создаёт трейсы генератора + судьи и Scores по вопросам.
 
