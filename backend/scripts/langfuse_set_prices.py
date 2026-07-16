@@ -29,10 +29,12 @@ SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY", "")
 # Ключ — слаг OpenRouter (как он придёт в трейс из models.env). Нет слага в таблице
 # → скрипт предупредит и пропустит (значит: добавь цену сюда при добавлении модели).
 PRICES_PER_1M = {
-    "qwen/qwen3.6": (0.32, 1.28),
+    "qwen/qwen3.6-plus": (0.33, 1.95),
     "openai/gpt-5.4": (2.50, 15.00),
     "google/gemini-3.1-flash-lite": (0.25, 1.50),
-    # известные альтернативы из model-flow (на случай смены в models.env):
+    # известные альтернативы (на случай смены в models.env):
+    "qwen/qwen3.6-flash": (0.19, 1.12),
+    "qwen/qwen3.7-plus": (0.32, 1.28),
     "google/gemini-3.1-flash": (0.30, 2.50),
     "deepseek/deepseek-v4-flash": (0.14, 0.28),
 }

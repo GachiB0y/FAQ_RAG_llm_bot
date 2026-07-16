@@ -11,10 +11,16 @@
 
 ## 📍 YOU ARE HERE
 
-> **Текущий шаг:** ✅ Шаги A (uv) + B (Makefile) готовы. Следующее — **Шаг A3 (Langfuse)**
-> или **Шаг F (Prefect)**. Обнови этот блок в конце каждой сессии.
+> **Текущий шаг:** ✅ Шаги A (uv) + B (Makefile) + C (Langfuse) готовы. Следующее —
+> **Шаг D (DVC)** или **Шаг F (Prefect)**. Обнови этот блок в конце каждой сессии.
 
 **Лог сессий:**
+- 2026-07-15/16: **Шаг C (Langfuse) сделан.** Self-hosted v3 (`make langfuse-up`, :3001),
+  модуль `observability.py` (оба контура eval+live, флаг `LANGFUSE_ENABLED`), генератор
+  через OpenInference (langfuse.llama_index в v3 удалён), судья через LangChain-callback,
+  Ragas-метрики как Scores, custom-прайсинг скриптом (`make langfuse-prices`). Сверка cost
+  Langfuse↔OpenRouter ~4%. Попутно залечена боль #5 (llama-index-llms-openai-like в lock),
+  генератор qwen/qwen3.6→qwen/qwen3.6-plus (голого слага на OR нет).
 - 2026-07-06: создан план + вводные доки (uv, Makefile, Prefect intro). Решили
   идти по порядку A→B→F.
 - 2026-07-08: **Шаг A (uv) сделан.** pyproject + группа eval с пинами, uv.lock
@@ -62,7 +68,13 @@
 
 ---
 
-### ⬜ Шаг C — Langfuse (лечит боль #4 «нет мониторинга») ⭐
+### ✅ Шаг C — Langfuse (лечит боль #4 «нет мониторинга») — СДЕЛАНО 2026-07-16
+
+Реализация: [langfuse-observability plan](../superpowers/plans/2026-07-15-langfuse-observability.md).
+Кратко: self-hosted v3 (:3001), `observability.py` (флаг-gated, оба контура), генератор
+через OpenInference, судья через LangChain-callback, Ragas→Scores, custom-прайсинг скриптом,
+сверка cost с OpenRouter ~4%. Ниже — исходный чек-лист (выполнен):
+
 
 📖 **Вводная перед реализацией:** [langfuse-intro](2026-07-08-langfuse-intro.md)
 

@@ -53,6 +53,7 @@ eval = [
     "langchain-core<0.4",
     "langchain-ollama<0.3",
     "langchain-openai",
+    "llama-index-llms-openai-like",
     "datasets<3",
     "mlflow>=2.14",
     "fastembed",
