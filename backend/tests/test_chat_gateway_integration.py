@@ -129,3 +129,21 @@ def test_gateway_stats_counts_blocks(client):
     body = r.json()
     assert body["blocked_injections"] == 1
     assert body["rate_limited"] == 0
+
+
+def test_query_runs_and_returns_via_threadpool(client, monkeypatch):
+    """run_in_threadpool должен быть вызван при обработке запроса (M2)."""
+    import app.api.v1.chat as chat_mod
+
+    called = {}
+    orig = chat_mod.run_in_threadpool
+
+    async def spy(func, *args, **kwargs):
+        called["ok"] = True
+        return await orig(func, *args, **kwargs)
+
+    monkeypatch.setattr(chat_mod, "run_in_threadpool", spy)
+    r = client.post("/api/v1/chat", json={"message": "Сколько стоит взнос?"})
+    assert r.status_code == 200
+    assert r.json()["answer"] == "тестовый ответ"
+    assert called.get("ok"), "run_in_threadpool was not called"

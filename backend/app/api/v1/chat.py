@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import (
     get_current_user,
@@ -79,7 +80,7 @@ async def chat(
         tags=["dense"],
         metadata={"prompt_hash": prompt_hash(SYSTEM_PROMPT)},
     ) as trace:
-        result = rag.query(data.message, chat_history=history)
+        result = await run_in_threadpool(rag.query, data.message, chat_history=history)
         trace.update(metadata={
             "confidence": result["confidence"],
             "sources_count": len(result["sources"]),
