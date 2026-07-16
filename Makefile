@@ -36,7 +36,7 @@ EVAL_ENV = -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e DATASET_SOURCE=json \
 	-e GIT_COMMIT="$(GIT_COMMIT)"
 
 .PHONY: help up down rebuild logs shell corpus ingest ingest-hybrid ocr kg testset \
-	eval-dense eval-hybrid mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices
+	eval-dense eval-hybrid eval-golden mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices
 
 help: ## Показать все команды
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -88,6 +88,10 @@ eval-dense: ## Прогон Ragas eval — dense retrieval
 
 eval-hybrid: ## Прогон Ragas eval — hybrid retrieval
 	docker exec $(EVAL_ENV) -e HYBRID=true $(BACKEND) python -u scripts/eval_rag.py
+
+eval-golden: ## Прогон Ragas eval на курированном golden-датасете (dense, 11 вопросов)
+	docker exec $(EVAL_ENV) -e DATASET_PATH=/app/tests/eval/testset_golden.json \
+	  $(BACKEND) python -u scripts/eval_rag.py
 
 # ─────────────── UI ───────────────
 mlflow-ui: ## Поднять MLflow UI на localhost:5050
