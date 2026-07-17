@@ -43,7 +43,11 @@ help: ## Показать все команды
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # ─────────────── инфраструктура ───────────────
-up: ## Поднять весь docker-стек
+up: ## Поднять весь docker-стек (ключи из .env.eval прокидываются в live-контейнер)
+	OPENROUTER_API_KEY="$(OPENROUTER_KEY)" \
+	LANGFUSE_ENABLED="$(LANGFUSE_ENABLED)" \
+	LANGFUSE_PUBLIC_KEY="$(LANGFUSE_PUBLIC)" \
+	LANGFUSE_SECRET_KEY="$(LANGFUSE_SECRET)" \
 	docker compose up -d
 
 down: ## Погасить стек
