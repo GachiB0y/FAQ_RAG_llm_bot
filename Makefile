@@ -100,7 +100,8 @@ eval-golden: ## Прогон Ragas eval на курированном golden-д�
 B4_GENERATORS = qwen/qwen3.6-plus deepseek/deepseek-v4-flash google/gemini-3.1-flash
 B4_ENV = -e MLFLOW_EXPERIMENT=b4-generator-selection -e DATASET_VERSION=golden_v1 \
 	-e EVAL_PURPOSE=b4-generator-selection -e EVAL_STAGE=1 \
-	-e DATASET_PATH=/app/tests/eval/testset_golden.json
+	-e DATASET_PATH=/app/tests/eval/testset_golden.json \
+	-e SKIP_CACHE=true
 
 b4-stage1: ## B4 Этап 1 — прогнать 3 генератора-кандидата на golden (судья gpt-5.4)
 	@for m in $(B4_GENERATORS); do \
