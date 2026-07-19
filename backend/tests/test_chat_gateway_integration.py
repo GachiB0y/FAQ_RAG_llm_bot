@@ -35,6 +35,7 @@ def client(monkeypatch):
 
     fake_user = SimpleNamespace(
         id="u-1",
+        email="admin@example.com",
         is_active=True,
         role=SimpleNamespace(value="admin"),
     )
@@ -71,7 +72,8 @@ def client(monkeypatch):
     # эндпоинт читает settings.GATEWAY_ENABLED через get_settings_dep — иначе
     # тесту понадобился бы полный .env для Settings()
     app.dependency_overrides[get_settings_dep] = lambda: SimpleNamespace(
-        GATEWAY_ENABLED=True
+        GATEWAY_ENABLED=True,
+        TELEGRAM_BOT_USER_EMAIL="bot@example.com",
     )
 
     yield TestClient(app)
@@ -147,3 +149,68 @@ def test_query_runs_and_returns_via_threadpool(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["answer"] == "тестовый ответ"
     assert called.get("ok"), "run_in_threadpool was not called"
+
+
+@pytest.fixture
+def bot_client(monkeypatch):
+    fake_redis = FakeRedis()
+    bot_user = SimpleNamespace(
+        id="bot-1",
+        email="bot@example.com",
+        is_active=True,
+        role=SimpleNamespace(value="user"),
+    )
+
+    def _gateway():
+        return SecurityGateway(
+            RateLimiter(fake_redis, limit_per_day=10),
+            InjectionGuard(classifier=None),
+            fake_redis,
+        )
+
+    async def _fake_get_or_create_conversation(user_id, db):
+        return SimpleNamespace(id="conv-1")
+
+    async def _fake_save_messages_pair(conversation_id, q, a, db):
+        return None
+
+    monkeypatch.setattr(
+        "app.api.v1.chat.get_or_create_conversation", _fake_get_or_create_conversation
+    )
+    monkeypatch.setattr(
+        "app.api.v1.chat.save_messages_pair", _fake_save_messages_pair
+    )
+
+    async def _fake_db():
+        yield None
+
+    app.dependency_overrides[get_current_user] = lambda: bot_user
+    app.dependency_overrides[get_rag_engine] = lambda: _FakeRag()
+    app.dependency_overrides[get_redis] = lambda: fake_redis
+    app.dependency_overrides[get_gateway] = _gateway
+    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[get_settings_dep] = lambda: SimpleNamespace(
+        GATEWAY_ENABLED=True,
+        TELEGRAM_BOT_USER_EMAIL="bot@example.com",
+    )
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_per_telegram_user_rate_limit_is_isolated(bot_client):
+    for _ in range(10):
+        r = bot_client.post(
+            "/api/v1/chat", json={"message": "ок"},
+            headers={"X-Telegram-User-Id": "111"},
+        )
+        assert r.status_code == 200
+    assert bot_client.post(
+        "/api/v1/chat", json={"message": "ок"},
+        headers={"X-Telegram-User-Id": "111"},
+    ).status_code == 429
+
+    assert bot_client.post(
+        "/api/v1/chat", json={"message": "ок"},
+        headers={"X-Telegram-User-Id": "222"},
+    ).status_code == 200

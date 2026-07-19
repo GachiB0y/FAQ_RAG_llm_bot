@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     INJECTION_GUARD_LLM_ENABLED: bool = False
     INJECTION_GUARD_MODEL: str = "google/gemini-3.1-flash-lite"
     OPENROUTER_API_KEY: Optional[str] = None
+    # E1 — Telegram-бот: email служебного bot-юзера. Только его запросам доверяем
+    # заголовок X-Telegram-User-Id (иначе веб-юзер подделал бы чужой tg id).
+    TELEGRAM_BOT_USER_EMAIL: Optional[str] = None
 
     # Upload
     UPLOAD_DIR: str = "/app/uploads"
