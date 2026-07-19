@@ -36,7 +36,7 @@ EVAL_ENV = -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e DATASET_SOURCE=json \
 	-e GIT_COMMIT="$(GIT_COMMIT)"
 
 .PHONY: help up down rebuild logs shell corpus ingest ingest-hybrid ocr kg testset \
-	eval-dense eval-hybrid eval-golden mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices
+	eval-dense eval-hybrid eval-golden b4-stage1 mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices
 
 help: ## Показать все команды
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -96,6 +96,19 @@ eval-hybrid: ## Прогон Ragas eval — hybrid retrieval
 eval-golden: ## Прогон Ragas eval на курированном golden-датасете (dense, 11 вопросов)
 	docker exec $(EVAL_ENV) -e DATASET_PATH=/app/tests/eval/testset_golden.json \
 	  $(BACKEND) python -u scripts/eval_rag.py
+
+B4_GENERATORS = qwen/qwen3.6-plus deepseek/deepseek-v4-flash google/gemini-3.1-flash
+B4_ENV = -e MLFLOW_EXPERIMENT=b4-generator-selection -e DATASET_VERSION=golden_v1 \
+	-e EVAL_PURPOSE=b4-generator-selection -e EVAL_STAGE=1 \
+	-e DATASET_PATH=/app/tests/eval/testset_golden.json
+
+b4-stage1: ## B4 Этап 1 — прогнать 3 генератора-кандидата на golden (судья gpt-5.4)
+	@for m in $(B4_GENERATORS); do \
+	  echo ">> B4 generator: $$m"; \
+	  docker exec $(EVAL_ENV) $(B4_ENV) -e OPENROUTER_GEN_MODEL="$$m" \
+	    $(BACKEND) python -u scripts/eval_rag.py || exit 1; \
+	done
+	@echo ">> Готово. MLflow UI: make mlflow-ui → эксперимент b4-generator-selection"
 
 # ─────────────── UI ───────────────
 mlflow-ui: ## Поднять MLflow UI на localhost:5050
