@@ -21,6 +21,7 @@ UI MLflow (отдельно, один раз):
 
 import os
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, "/app")
@@ -50,6 +51,9 @@ from app.core.observability import (
 )
 from app.core.rag.engine import SYSTEM_PROMPT
 from app.core.rag.retriever import QdrantRetriever
+
+sys.path.insert(0, "/app/scripts")
+from eval_config import build_mlflow_tags, mean_valid_latency, model_short, samples_cache_filename
 
 # Hybrid retriever импортируем лениво (только если HYBRID=true) — fastembed
 # подгружает модель ~80 MB при импорте.
@@ -81,7 +85,8 @@ OLLAMA_GEN_MODEL = os.environ.get("OLLAMA_GEN_MODEL", "qwen3:1.7b")
 # Своего дефолта НЕТ: нет env → падаем в make_rag_llm.
 OPENROUTER_GEN_MODEL = os.environ.get("OPENROUTER_GEN_MODEL", "")
 EMBEDDING_MODEL = "bge-m3"
-TOP_K = 5
+TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
+RAG_TEMPERATURE = float(os.environ.get("RAG_TEMPERATURE", "0.1"))
 
 # Судья — провайдер выбираем env-флагом.
 JUDGE_PROVIDER = os.environ.get("JUDGE_PROVIDER", "openrouter")
@@ -289,7 +294,7 @@ def make_rag_llm():
         return _Ollama(
             base_url=OLLAMA_URL,
             model=OLLAMA_GEN_MODEL,
-            temperature=0.1,
+            temperature=RAG_TEMPERATURE,
             request_timeout=600.0,
             context_window=8192,
             additional_kwargs={"num_ctx": 8192, "num_predict": 1024},
@@ -309,7 +314,7 @@ def make_rag_llm():
             api_key=OPENROUTER_API_KEY,
             model=OPENROUTER_GEN_MODEL,
             is_chat_model=True,
-            temperature=0.1,
+            temperature=RAG_TEMPERATURE,
             timeout=300,
             max_retries=5,
             additional_kwargs={"max_tokens": 1024},
@@ -379,8 +384,12 @@ def main() -> None:
 
     # Кэш промежуточных RAG-результатов — чтобы при повторных запусках судьи
     # не перепрогонять долгие LLM-генерации.
+    gen_short = model_short(
+        OPENROUTER_GEN_MODEL if GENERATOR_PROVIDER == "openrouter" else OLLAMA_GEN_MODEL
+    )
     samples_cache_path = Path(
-        f"/app/tests/eval/samples_{DATASET_SOURCE}_{RETRIEVAL_MODE}.json"
+        "/app/tests/eval/"
+        + samples_cache_filename(DATASET_SOURCE, RETRIEVAL_MODE, gen_short, TOP_K)
     )
     if samples_cache_path.exists() and os.environ.get("SKIP_CACHE") != "true":
         print(f">> Загружаю кэш RAG-ответов: {samples_cache_path}")
@@ -388,6 +397,7 @@ def main() -> None:
             cached = json.load(f)
         samples = cached["samples"]
         synthesizers = cached.get("synthesizers", [""] * len(samples))
+        latencies = cached.get("latencies", [])
         # Из кэша генерация не прогонялась → трейсов генератора нет.
         # Для Langfuse-прогона запускай свежим (SKIP_CACHE=true или удали кэш).
         lf_trace_ids = [None] * len(samples)
@@ -398,6 +408,7 @@ def main() -> None:
         synthesizers = []
         lf_trace_ids = []
         failed_indices = []
+        latencies = []
         for i, item in enumerate(items, 1):
             q_preview = item["question"][:80] + ("…" if len(item["question"]) > 80 else "")
             print(f"   [{i}/{len(items)}] {q_preview}")
@@ -414,12 +425,15 @@ def main() -> None:
                 },
             ) as trace:
                 try:
+                    _t0 = time.perf_counter()
                     answer, contexts = run_rag(item["question"], retriever, rag_llm)
+                    latencies.append(time.perf_counter() - _t0)
                 except Exception as e:
                     print(f"      [!] FAIL: {type(e).__name__}: {str(e)[:120]}")
                     failed_indices.append(i)
                     answer = "[Ошибка генерации: вопрос не отвечен]"
                     contexts = []
+                    latencies.append(float("nan"))
                 trace.update(metadata={"chunks": len(contexts)})
             lf_trace_ids.append(trace.id)
             samples.append(
@@ -440,7 +454,7 @@ def main() -> None:
         samples_cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(samples_cache_path, "w", encoding="utf-8") as f:
             json.dump(
-                {"samples": samples, "synthesizers": synthesizers},
+                {"samples": samples, "synthesizers": synthesizers, "latencies": latencies},
                 f,
                 ensure_ascii=False,
                 indent=2,
@@ -450,19 +464,9 @@ def main() -> None:
     dataset = EvaluationDataset.from_list(samples)
 
     mlflow.set_tracking_uri(MLFLOW_URI)
-    mlflow.set_experiment("ragas-eval")
+    mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT", "ragas-eval"))
 
-    judge_short = (
-        OPENROUTER_JUDGE_MODEL.split("/")[-1]
-        if JUDGE_PROVIDER == "openrouter"
-        else OLLAMA_JUDGE_MODEL
-    )
-    gen_short = (
-        OPENROUTER_GEN_MODEL.split("/")[-1]
-        if GENERATOR_PROVIDER == "openrouter"
-        else OLLAMA_GEN_MODEL
-    )
-    run_name = f"{DATASET_SOURCE}-{RETRIEVAL_MODE}-{gen_short}-judge-{judge_short}-k{TOP_K}"
+    run_name = gen_short  # различитель — только модель; детали в params/tags
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.log_params(
             {
@@ -486,6 +490,16 @@ def main() -> None:
                 "dataset_size": len(items),
                 "langfuse_session_id": lf_session_id,
             }
+        )
+        mlflow.set_tags(
+            build_mlflow_tags(
+                git_commit=GIT_COMMIT,
+                dataset_version=os.environ.get("DATASET_VERSION", "unknown"),
+                judge_model=judge_model_name,
+                purpose=os.environ.get("EVAL_PURPOSE", ""),
+                stage=os.environ.get("EVAL_STAGE", ""),
+                langfuse_session_id=lf_session_id,
+            )
         )
 
         print("\n>> Ragas evaluate (это самая долгая часть — LLM-судья по каждой паре)...")
@@ -532,6 +546,10 @@ def main() -> None:
                     m = sub[col].dropna().mean()
                     if m == m:
                         mlflow.log_metric(f"by_synth__{synth_short}__{col}", float(m))
+
+        mean_lat = mean_valid_latency(latencies)
+        if mean_lat is not None:
+            mlflow.log_metric("mean_latency_s", mean_lat)
 
         print("\n=== Сводка по метрикам ===")
         numeric_cols = [c for c in df.columns if df[c].dtype.kind in "fi"]

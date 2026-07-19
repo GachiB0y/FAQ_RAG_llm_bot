@@ -31,8 +31,12 @@ def test_gateway_defaults(monkeypatch):
     assert s.OPENROUTER_API_KEY is None
 
 
-def test_openrouter_generator_defaults():
+def test_openrouter_generator_defaults(monkeypatch):
     from app.config import Settings
+
+    # OPENROUTER_GEN_MODEL задаётся в docker-compose — чтобы проверить именно ДЕФОЛТ
+    # поля (B4-выбор), убираем возможную переменную окружения.
+    monkeypatch.delenv("OPENROUTER_GEN_MODEL", raising=False)
     s = Settings(
         DATABASE_URL="postgresql+asyncpg://x",
         REDIS_URL="redis://x",
@@ -41,4 +45,4 @@ def test_openrouter_generator_defaults():
         LLM_PROVIDER="openrouter",
     )
     assert s.LLM_PROVIDER == "openrouter"
-    assert s.OPENROUTER_GEN_MODEL == "qwen/qwen3.6-plus"
+    assert s.OPENROUTER_GEN_MODEL == "deepseek/deepseek-v4-flash"

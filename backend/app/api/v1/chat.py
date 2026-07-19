@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -20,6 +20,7 @@ from app.core.rag import RAGEngine
 from app.core.observability import trace_context, prompt_hash
 from app.core.rag.engine import SYSTEM_PROMPT
 from app.core.session import SessionManager
+from app.api.v1.actor import resolve_actor_id
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -40,6 +41,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 async def chat(
     data: ChatRequest,
+    response: Response,
     user: Annotated[User, Depends(get_current_user)],
     gateway: Annotated[SecurityGateway, Depends(get_gateway)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
@@ -48,19 +50,31 @@ async def chat(
     session_id: Annotated[str | None, Depends(get_session_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
     x_gateway_bypass: Annotated[str | None, Header()] = None,
+    x_telegram_user_id: Annotated[str | None, Header()] = None,
 ):
+    actor_id = resolve_actor_id(
+        user.email, str(user.id), x_telegram_user_id, settings.TELEGRAM_BOT_USER_EMAIL
+    )
     if gateway_applies(settings.GATEWAY_ENABLED, user.role.value, x_gateway_bypass):
-        decision = await gateway.check(str(user.id), data.message)
+        decision = await gateway.check(actor_id, data.message)
         if not decision.allowed:
             if decision.reason == "rate_limited":
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Дневной лимит запросов исчерпан, попробуйте завтра",
+                    headers={
+                        "X-RateLimit-Remaining": "0",
+                        "X-RateLimit-Limit": str(decision.limit),
+                        "X-RateLimit-Reset": str(decision.reset_seconds),
+                    },
                 )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Не могу обработать этот запрос",
             )
+        response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+        response.headers["X-RateLimit-Limit"] = str(decision.limit)
+        response.headers["X-RateLimit-Reset"] = str(decision.reset_seconds)
 
     session_mgr = SessionManager(redis_client)
 
@@ -75,7 +89,7 @@ async def chat(
     history = await session_mgr.get_history(session_id)
 
     with trace_context(
-        user_id=str(user.id),
+        user_id=actor_id,
         session_id=session_id,
         tags=["dense"],
         metadata={"prompt_hash": prompt_hash(SYSTEM_PROMPT)},
