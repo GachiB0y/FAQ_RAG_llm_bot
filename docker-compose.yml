@@ -10,7 +10,7 @@ services:
       - JWT_SECRET=change-this-secret-key-in-production
       - LLM_PROVIDER=openrouter
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENROUTER_GEN_MODEL=${OPENROUTER_GEN_MODEL:-qwen/qwen3.6-plus}
+      - OPENROUTER_GEN_MODEL=${OPENROUTER_GEN_MODEL:-deepseek/deepseek-v4-flash}
       # OLLAMA_URL нужен для ЭМБЕДДИНГОВ (bge-m3), даже когда генератор в OpenRouter —
       # _build_embedder читает settings.OLLAMA_URL; без него дефолт localhost:11434 (не тот хост в контейнере).
       - OLLAMA_URL=http://ollama:11434

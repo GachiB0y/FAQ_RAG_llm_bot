@@ -25,9 +25,10 @@ class Settings(BaseSettings):
     # NB: прод сейчас идёт через ollama (LLM_PROVIDER=ollama в docker-compose) — openai-путь
     # спящий. Прод на qwen/qwen3.6 через OpenRouter — B-линия (нужен OpenRouter/vLLM провайдер).
     RAG_GENERATOR_MODEL: str = "gpt-4o-mini"
-    # Слаг генератора для openrouter-провайдера (OpenRouter-слаг, напр. qwen/qwen3.6-plus).
-    # Дефолт — текущий выбор; B4 подтвердит/сменит. См. docs/plans/2026-07-08-model-flow.md.
-    OPENROUTER_GEN_MODEL: str = "qwen/qwen3.6-plus"
+    # Слаг генератора для openrouter-провайдера (OpenRouter-слаг, напр. deepseek/deepseek-v4-flash).
+    # Дефолт — выбор B4 (2026-07-19): deepseek обошёл qwen по faithfulness+answer_relevancy,
+    # вдвое быстрее и дешевле. См. docs/superpowers/specs/2026-07-19-b4-generator-selection-design.md.
+    OPENROUTER_GEN_MODEL: str = "deepseek/deepseek-v4-flash"
 
     # Embeddings
     EMBEDDING_PROVIDER: Literal["openai", "ollama"] = "openai"
