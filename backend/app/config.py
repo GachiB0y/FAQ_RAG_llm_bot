@@ -15,11 +15,19 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60
 
     # LLM
-    LLM_PROVIDER: Literal["openai", "anthropic", "ollama"] = "openai"
+    LLM_PROVIDER: Literal["openai", "anthropic", "ollama", "openrouter"] = "openai"
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3:1.7b"
+    # Модель генератора для openai-провайдера (bare OpenAI id, НЕ OpenRouter-слаг!).
+    # Единый источник имени для прод-openai-пути вместо хардкода в адаптере.
+    # NB: прод сейчас идёт через ollama (LLM_PROVIDER=ollama в docker-compose) — openai-путь
+    # спящий. Прод на qwen/qwen3.6 через OpenRouter — B-линия (нужен OpenRouter/vLLM провайдер).
+    RAG_GENERATOR_MODEL: str = "gpt-4o-mini"
+    # Слаг генератора для openrouter-провайдера (OpenRouter-слаг, напр. qwen/qwen3.6-plus).
+    # Дефолт — текущий выбор; B4 подтвердит/сменит. См. docs/plans/2026-07-08-model-flow.md.
+    OPENROUTER_GEN_MODEL: str = "qwen/qwen3.6-plus"
 
     # Embeddings
     EMBEDDING_PROVIDER: Literal["openai", "ollama"] = "openai"
@@ -30,6 +38,19 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 50
     SIMILARITY_THRESHOLD: float = 0.7
     TOP_K_RESULTS: int = 5
+
+    # Observability (Langfuse) — docs/superpowers/specs/2026-07-15-langfuse-observability-design.md
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "http://localhost:3001"
+
+    # Security Gateway (E4) — docs/superpowers/specs/2026-07-14-security-gateway-design.md
+    GATEWAY_ENABLED: bool = True
+    RATE_LIMIT_PER_DAY: int = 10
+    INJECTION_GUARD_LLM_ENABLED: bool = False
+    INJECTION_GUARD_MODEL: str = "google/gemini-3.1-flash-lite"
+    OPENROUTER_API_KEY: Optional[str] = None
 
     # Upload
     UPLOAD_DIR: str = "/app/uploads"

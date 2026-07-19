@@ -12,3 +12,33 @@ def test_settings_loads_defaults():
     assert settings.LLM_PROVIDER == "openai"
     assert settings.CHUNK_SIZE == 512
     assert settings.SIMILARITY_THRESHOLD == 0.7
+
+
+def test_gateway_defaults(monkeypatch):
+    # OPENROUTER_API_KEY теперь задаётся в docker-compose (M1, значение может быть пустым) —
+    # чтобы проверить именно ДЕФОЛТ поля, убираем возможную переменную окружения.
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    s = Settings(
+        DATABASE_URL="postgresql+asyncpg://x",
+        REDIS_URL="redis://x",
+        QDRANT_URL="http://x",
+        JWT_SECRET="secret",
+    )
+    assert s.GATEWAY_ENABLED is True
+    assert s.RATE_LIMIT_PER_DAY == 10
+    assert s.INJECTION_GUARD_LLM_ENABLED is False
+    assert s.INJECTION_GUARD_MODEL == "google/gemini-3.1-flash-lite"
+    assert s.OPENROUTER_API_KEY is None
+
+
+def test_openrouter_generator_defaults():
+    from app.config import Settings
+    s = Settings(
+        DATABASE_URL="postgresql+asyncpg://x",
+        REDIS_URL="redis://x",
+        QDRANT_URL="http://x",
+        JWT_SECRET="secret",
+        LLM_PROVIDER="openrouter",
+    )
+    assert s.LLM_PROVIDER == "openrouter"
+    assert s.OPENROUTER_GEN_MODEL == "qwen/qwen3.6-plus"

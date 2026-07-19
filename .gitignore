@@ -31,7 +31,12 @@ Thumbs.db
 *.tsbuildinfo
 
 # ─────────────── IDE / Local tools ───────────────
-**/.claude/
+# root .claude — трекаем shared skills, игнорим личные настройки и бинарные .skill
+.claude/*
+!.claude/skills/
+.claude/skills/*.skill
+# прочие .claude (напр. frontend) остаются полностью игнорируемыми, как было
+frontend/.claude/
 **/.cursor/
 **/.vscode/
 **/.idea/
@@ -55,6 +60,9 @@ admin-tester.skill
 test-generator.skill
 zifUGoKX
 docs/plans/image-pdf-page.png
+
+# ─────────────── Jupyter ───────────────
+**/.ipynb_checkpoints/
 
 # ─────────────── Logs ───────────────
 *.log

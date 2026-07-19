@@ -4,7 +4,7 @@ from .base import BaseLLMAdapter
 
 
 class OpenAIAdapter(BaseLLMAdapter):
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str):  # модель задаёт factory из Settings.RAG_GENERATOR_MODEL
         self.api_key = api_key
         self.model = model
 

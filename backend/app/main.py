@@ -34,6 +34,14 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"Starting FAQ RAG Bot with LLM provider: {settings.LLM_PROVIDER}")
 
+    from app.core.observability import init_observability
+    init_observability(
+        settings.LANGFUSE_ENABLED,
+        public_key=settings.LANGFUSE_PUBLIC_KEY,
+        secret_key=settings.LANGFUSE_SECRET_KEY,
+        host=settings.LANGFUSE_HOST,
+    )
+
     cleanup_task = asyncio.create_task(
         _cleanup_loop(settings.CHAT_HISTORY_RETENTION_DAYS)
     )

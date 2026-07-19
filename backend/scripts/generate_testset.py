@@ -45,9 +45,9 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
 GEN_EMB_MODEL = os.environ.get("GEN_EMB_MODEL", "bge-m3")
 GEN_PROVIDER = os.environ.get("GEN_PROVIDER", "openrouter")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get(
-    "OPENROUTER_MODEL", "google/gemma-4-31b-it:free"
-)
+# Модель testset-генератора — из backend/models.env через Makefile (env, тот же KG_MODEL).
+# Своего дефолта НЕТ: нет env → падаем в make_llm.
+OPENROUTER_KG_MODEL = os.environ.get("OPENROUTER_KG_MODEL", "")
 OLLAMA_GEN_MODEL = os.environ.get("OLLAMA_GEN_MODEL", "qwen2.5:7b")
 
 KG_INPUT = Path("/app/tests/eval/kg.json")
@@ -95,6 +95,11 @@ def make_llm():
             raise RuntimeError(
                 "OPENROUTER_API_KEY не задан — пробрось через env при запуске"
             )
+        if not OPENROUTER_KG_MODEL:
+            raise RuntimeError(
+                "OPENROUTER_KG_MODEL не задан — задай KG_MODEL в backend/models.env "
+                "(запуск через make) или пробрось env вручную"
+            )
         from langchain_core.rate_limiters import InMemoryRateLimiter
         from langchain_openai import ChatOpenAI
 
@@ -108,7 +113,7 @@ def make_llm():
             ChatOpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=OPENROUTER_API_KEY,
-                model=OPENROUTER_MODEL,
+                model=OPENROUTER_KG_MODEL,
                 temperature=0,
                 timeout=60,
                 max_retries=5,
@@ -139,7 +144,7 @@ def main() -> None:
         )
 
     provider_label = (
-        f"openrouter/{OPENROUTER_MODEL}"
+        f"openrouter/{OPENROUTER_KG_MODEL}"
         if GEN_PROVIDER == "openrouter"
         else f"ollama/{OLLAMA_GEN_MODEL}"
     )

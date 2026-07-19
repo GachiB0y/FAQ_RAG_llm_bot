@@ -89,7 +89,12 @@ export const documentsApi = {
 export const chatApi = {
   send: async (data: ChatRequest, sessionId?: string): Promise<ChatResponse> => {
     const response = await api.post<ChatResponse>('/api/v1/chat', data, {
-      headers: sessionId ? { 'X-Session-Id': sessionId } : {},
+      // Веб-панель = админ-лайв-контур: шлём bypass. Бэкенд чтит заголовок только
+      // для role=admin (бот прислать может, но он игнорируется) — см. E4.
+      headers: {
+        'X-Gateway-Bypass': '1',
+        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
+      },
     });
     return response.data;
   },
