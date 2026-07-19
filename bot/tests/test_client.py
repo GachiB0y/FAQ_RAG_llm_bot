@@ -47,6 +47,7 @@ async def test_chat_429_parses_reset_headers():
 
     res = await _client(handler).chat("q", 1)
     assert res.kind == "rate_limited"
+    assert res.remaining == 0
     assert res.reset_seconds == 1800
     assert res.daily_limit == 10
 
@@ -100,3 +101,44 @@ async def test_chat_network_error_maps_to_error():
         raise httpx.ConnectError("boom")
 
     assert (await _client(handler).chat("q", 1)).kind == "error"
+
+
+@pytest.mark.asyncio
+async def test_chat_login_503_maps_to_error():
+    """Finding 1: login raises HTTPStatusError (5xx) → chat() returns ChatResult(kind='error')."""
+    def handler(request):
+        if request.url.path == "/api/v1/auth/login":
+            return httpx.Response(503, text="unavailable")
+        return httpx.Response(200, headers=OK_HEADERS, json={
+            "answer": "ok", "sources": [], "confidence": 0.9, "session_id": "s",
+        })
+
+    res = await _client(handler).chat("q", 1)
+    assert res.kind == "error"
+
+
+@pytest.mark.asyncio
+async def test_chat_403_maps_to_error():
+    """Finding 2: unexpected 4xx (403) → ChatResult(kind='error')."""
+    def handler(request):
+        if request.url.path == "/api/v1/auth/login":
+            return httpx.Response(200, json={"access_token": "T", "refresh_token": "R"})
+        return httpx.Response(403, json={"detail": "forbidden"})
+
+    assert (await _client(handler).chat("q", 1)).kind == "error"
+
+
+@pytest.mark.asyncio
+async def test_chat_double_401_maps_to_error():
+    """Finding 3: login ok → first chat 401 → re-login ok → second chat 401 → error."""
+    state = {"logins": 0}
+
+    def handler(request):
+        if request.url.path == "/api/v1/auth/login":
+            state["logins"] += 1
+            return httpx.Response(200, json={"access_token": "T", "refresh_token": "R"})
+        return httpx.Response(401, json={"detail": "expired"})
+
+    res = await _client(handler).chat("q", 1)
+    assert res.kind == "error"
+    assert state["logins"] == 2

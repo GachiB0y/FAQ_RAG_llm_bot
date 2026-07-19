@@ -44,10 +44,18 @@ class BackendClient:
 
     async def chat(self, text: str, telegram_user_id: int) -> ChatResult:
         if self._token is None:
-            await self._login()
+            try:
+                await self._login()
+            except httpx.HTTPError as exc:
+                logger.warning("login failed: %s", exc)
+                return ChatResult(kind="error")
         result = await self._post_chat(text, telegram_user_id)
         if result.kind == _AUTH_EXPIRED:
-            await self._login()
+            try:
+                await self._login()
+            except httpx.HTTPError as exc:
+                logger.warning("re-login failed: %s", exc)
+                return ChatResult(kind="error")
             result = await self._post_chat(text, telegram_user_id)
             if result.kind == _AUTH_EXPIRED:
                 return ChatResult(kind="error")
@@ -79,6 +87,8 @@ class BackendClient:
         if r.status_code == 400:
             return ChatResult(kind="rejected")
         if r.status_code >= 500:
+            return ChatResult(kind="error")
+        if r.status_code >= 400:
             return ChatResult(kind="error")
 
         data = r.json()
