@@ -22,6 +22,7 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=http://host.docker.internal:3001
       - LANGFUSE_TRACING_ENVIRONMENT=production
+      - TELEGRAM_BOT_USER_EMAIL=${TELEGRAM_BOT_EMAIL:-bot@example.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +49,17 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  telegram-bot:
+    build: ./bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - BACKEND_URL=http://backend:8000
+      - TELEGRAM_BOT_EMAIL=${TELEGRAM_BOT_EMAIL:-bot@example.com}
+      - TELEGRAM_BOT_PASSWORD=${TELEGRAM_BOT_PASSWORD:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
