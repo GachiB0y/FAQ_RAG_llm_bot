@@ -20,6 +20,11 @@
    (переиспользуем существующий auth, ноль правок в auth-бэке).
 4. **Функции (must-have)** — минимум: вопрос → ответ + источники, `/start`, typing,
    обработка 429/400/5xx. Без истории диалога и кнопок (YAGNI).
+5. **Показ остатка квоты** — под каждым ответом бот пишет строку «Осталось N из 10
+   сообщений на сегодня». При исчерпании (429) — «лимит обновится через Xч Yм».
+   Бэкенд отдаёт остаток/лимит/секунды-до-сброса в **HTTP-заголовках** ответа
+   `/api/v1/chat` (`X-RateLimit-Remaining/-Limit/-Reset`) — схема `ChatResponse` и
+   веб-контракт не меняются, заголовки чисто аддитивные.
 
 ## Архитектура
 
@@ -57,6 +62,20 @@ Telegram user → бот получает update (polling)
 
 Новая настройка в `backend/app/config.py`: `TELEGRAM_BOT_USER_EMAIL: Optional[str] = None`.
 
+### A2. Остаток квоты в заголовках — gateway + `chat.py`
+
+Чтобы бот (тонкий клиент без доступа к Redis) мог показать остаток:
+
+- `RateLimiter` получает метод `hit(user_id) -> RateLimitStatus(allowed, remaining,
+  limit, reset_seconds)` — тот же INCR+EXPIRE, но возвращает и остаток (`limit - count`,
+  не ниже 0) и `reset_seconds` (секунд до полуночи сервера — фактический сброс, т.к.
+  ключ датовый). `is_allowed` сохраняется (делегирует в `hit`) — старые тесты целы.
+- `GatewayDecision` получает опциональные поля `remaining/limit/reset_seconds`
+  (default `None`); `SecurityGateway.check` заполняет их из `hit`.
+- `chat.py`: при `allowed` — проставляет заголовки `X-RateLimit-Remaining/-Limit/-Reset`
+  в `Response`; при `429` — те же заголовки в `HTTPException(headers=...)` (`Remaining=0`).
+  На инъекцию (400) квоту не показываем.
+
 ### B. Bot-юзер в Postgres
 
 Служебный пользователь (`role=user`), учётка из env бота. Заводится сидом/скриптом
@@ -74,7 +93,8 @@ Gateway применяется к нему (role=user), но лимит счит
 - **Любой текст:** `sendChatAction: typing` → `POST /api/v1/chat` с `Authorization` и
   `X-Telegram-User-Id: <message.from_user.id>` → форматирование ответа.
 - **Формат ответа:** `answer` + блок источников: `📎 Источники:` строками
-  `<document>, стр. <page>` (page может быть `None` → без страницы; дедуп по документу+странице).
+  `<document>, стр. <page>` (page может быть `None` → без страницы; дедуп по документу+странице)
+  + строка квоты `Осталось N из <limit> сообщений на сегодня` (из заголовков ответа).
 - **Stateless:** `session_id`/`X-Session-Id` не прокидываем → каждый вопрос независим
   (минимум по договорённости, без памяти диалога).
 - **Токен бота:** `TELEGRAM_BOT_TOKEN` из env.
@@ -83,13 +103,14 @@ Gateway применяется к нему (role=user), но лимит счит
 
 Тонкая обёртка над `httpx.AsyncClient`: логин, `chat(text, telegram_user_id)`,
 хранение/рефреш токена. Маппинг статусов → доменные результаты, чтобы хендлеры не
-знали про HTTP.
+знали про HTTP. Из заголовков ответа (200 и 429) вытаскивает `remaining/limit/
+reset_seconds` в `ChatResult`.
 
 ## Обработка ошибок
 
 | Ситуация | Ответ пользователю |
 |---|---|
-| `429` (rate-limit E4) | «Вы исчерпали дневной лимит запросов (10/день). Приходите завтра.» |
+| `429` (rate-limit E4) | «Вы исчерпали дневной лимит (N/день). Лимит обновится через Xч Yм.» (из заголовков) |
 | `400` (injection guard) | Вежливый отказ: «Не могу обработать этот запрос.» |
 | таймаут / `5xx` / сеть | «Сервис временно недоступен, попробуйте позже.» |
 | `401` | внутренний перелог + 1 повтор; при повторном фейле → как 5xx |
@@ -111,12 +132,17 @@ Gateway применяется к нему (role=user), но лимит счит
   - (a) bot-юзер + заголовок → `tg:<id>`;
   - (b) веб-юзер + заголовок → заголовок игнорируется, `str(user.id)`;
   - (c) нет заголовка → `str(user.id)`.
+- unit `RateLimiter.hit`: остаток убывает (limit-count, не ниже 0); `reset_seconds`
+  положителен; fail-open при ошибке Redis.
 - integration: два разных `X-Telegram-User-Id` под bot-токеном лимитятся независимо;
-  превышение лимита одного tg-id → `429`, второй tg-id ещё проходит.
+  превышение лимита одного tg-id → `429`, второй tg-id ещё проходит; на `200` есть
+  заголовки `X-RateLimit-*`, на `429` — тоже (`Remaining=0`).
 
 **Бот (pytest, замоканный клиент):**
-- форматирование ответа + источников (в т.ч. `page=None`, дедуп, пустой список);
-- маппинг статусов `429/400/5xx` → тексты сообщений;
+- форматирование ответа + источников (в т.ч. `page=None`, дедуп, пустой список)
+  + строка квоты; `format_duration(seconds)` → «Xч Yм» / «Yм»;
+- маппинг статусов `429/400/5xx` → тексты сообщений (в 429 — время сброса из заголовка);
+- клиент парсит `X-RateLimit-*` из ответа (200 и 429);
 - рефреш-логика: `401` → перелог + один повтор.
 
 ## Границы (в этот спек НЕ входит)
@@ -128,8 +154,12 @@ Gateway применяется к нему (role=user), но лимит счит
 
 ## Затрагиваемые файлы
 
-- `backend/app/api/v1/chat.py` — заголовок + `resolve_actor_id` (правка).
+- `backend/app/api/v1/chat.py` — заголовок `X-Telegram-User-Id` + `resolve_actor_id`
+  + проставление заголовков `X-RateLimit-*` (правка).
 - `backend/app/config.py` — `TELEGRAM_BOT_USER_EMAIL` (правка).
-- `backend/tests/...` — тесты `resolve_actor_id` + integration (новое).
+- `backend/app/core/gateway/rate_limiter.py` — метод `hit` + `RateLimitStatus` (правка).
+- `backend/app/core/gateway/decision.py` — поля `remaining/limit/reset_seconds` (правка).
+- `backend/app/core/gateway/gateway.py` — `check` заполняет поля из `hit` (правка).
+- `backend/tests/...` — тесты `resolve_actor_id`, `hit`, integration квоты (новое/правка).
 - `bot/` — сервис aiogram: `main.py`, `client.py`, `handlers.py`, deps, тесты (новое).
 - `docker-compose.yml`, `Makefile` — сервис + таргеты (правка).
