@@ -51,6 +51,9 @@ from app.core.observability import (
 from app.core.rag.engine import SYSTEM_PROMPT
 from app.core.rag.retriever import QdrantRetriever
 
+sys.path.insert(0, "/app/scripts")
+from eval_config import build_mlflow_tags, model_short, samples_cache_filename
+
 # Hybrid retriever импортируем лениво (только если HYBRID=true) — fastembed
 # подгружает модель ~80 MB при импорте.
 
@@ -379,8 +382,12 @@ def main() -> None:
 
     # Кэш промежуточных RAG-результатов — чтобы при повторных запусках судьи
     # не перепрогонять долгие LLM-генерации.
+    gen_short = model_short(
+        OPENROUTER_GEN_MODEL if GENERATOR_PROVIDER == "openrouter" else OLLAMA_GEN_MODEL
+    )
     samples_cache_path = Path(
-        f"/app/tests/eval/samples_{DATASET_SOURCE}_{RETRIEVAL_MODE}.json"
+        "/app/tests/eval/"
+        + samples_cache_filename(DATASET_SOURCE, RETRIEVAL_MODE, gen_short, TOP_K)
     )
     if samples_cache_path.exists() and os.environ.get("SKIP_CACHE") != "true":
         print(f">> Загружаю кэш RAG-ответов: {samples_cache_path}")
@@ -456,11 +463,6 @@ def main() -> None:
         OPENROUTER_JUDGE_MODEL.split("/")[-1]
         if JUDGE_PROVIDER == "openrouter"
         else OLLAMA_JUDGE_MODEL
-    )
-    gen_short = (
-        OPENROUTER_GEN_MODEL.split("/")[-1]
-        if GENERATOR_PROVIDER == "openrouter"
-        else OLLAMA_GEN_MODEL
     )
     run_name = f"{DATASET_SOURCE}-{RETRIEVAL_MODE}-{gen_short}-judge-{judge_short}-k{TOP_K}"
     with mlflow.start_run(run_name=run_name) as run:
