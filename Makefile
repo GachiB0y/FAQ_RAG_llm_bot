@@ -36,7 +36,8 @@ EVAL_ENV = -e OPENROUTER_API_KEY="$(OPENROUTER_KEY)" -e DATASET_SOURCE=json \
 	-e GIT_COMMIT="$(GIT_COMMIT)"
 
 .PHONY: help up down rebuild logs shell corpus ingest ingest-hybrid ocr kg testset \
-	eval-dense eval-hybrid eval-golden b4-stage1 mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices
+	eval-dense eval-hybrid eval-golden b4-stage1 mlflow-ui mlflow-stop langfuse-up langfuse-down langfuse-prices \
+	bot-seed bot-up bot-logs
 
 help: ## Показать все команды
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -136,3 +137,9 @@ langfuse-prices: ## Задать custom model prices в Langfuse (A3.2, идем
 	  -e LANGFUSE_SECRET_KEY="$(LANGFUSE_SECRET)" \
 	  -e GEN_MODEL="$(GEN_MODEL)" -e JUDGE_MODEL="$(JUDGE_MODEL)" -e KG_MODEL="$(KG_MODEL)" \
 	  $(BACKEND) python -u scripts/langfuse_set_prices.py
+
+# ─────────────── Telegram-бот (E1) ───────────────
+bot-seed: ## Создать служебного bot-юзера (email/пароль из .env: TELEGRAM_BOT_EMAIL/PASSWORD)
+	docker exec $(BACKEND) python scripts/seed_bot.py \
+	  "$$(grep '^TELEGRAM_BOT_EMAIL=' .env | cut -d= -f2-)" \
+	  "$$(grep '^TELEGRAM_BOT_PASSWORD=' .env | cut -d= -f2-)"
