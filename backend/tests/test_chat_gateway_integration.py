@@ -214,3 +214,29 @@ def test_per_telegram_user_rate_limit_is_isolated(bot_client):
         "/api/v1/chat", json={"message": "ок"},
         headers={"X-Telegram-User-Id": "222"},
     ).status_code == 200
+
+
+def test_ratelimit_headers_on_success(bot_client):
+    r = bot_client.post(
+        "/api/v1/chat", json={"message": "ок"},
+        headers={"X-Telegram-User-Id": "555"},
+    )
+    assert r.status_code == 200
+    assert r.headers["X-RateLimit-Limit"] == "10"
+    assert r.headers["X-RateLimit-Remaining"] == "9"   # 1 использован
+    assert int(r.headers["X-RateLimit-Reset"]) > 0
+
+
+def test_ratelimit_headers_on_429(bot_client):
+    for _ in range(10):
+        bot_client.post(
+            "/api/v1/chat", json={"message": "ок"},
+            headers={"X-Telegram-User-Id": "556"},
+        )
+    r = bot_client.post(
+        "/api/v1/chat", json={"message": "ок"},
+        headers={"X-Telegram-User-Id": "556"},
+    )
+    assert r.status_code == 429
+    assert r.headers["X-RateLimit-Remaining"] == "0"
+    assert int(r.headers["X-RateLimit-Reset"]) > 0

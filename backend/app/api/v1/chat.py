@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -41,6 +41,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 async def chat(
     data: ChatRequest,
+    response: Response,
     user: Annotated[User, Depends(get_current_user)],
     gateway: Annotated[SecurityGateway, Depends(get_gateway)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
@@ -61,11 +62,19 @@ async def chat(
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Дневной лимит запросов исчерпан, попробуйте завтра",
+                    headers={
+                        "X-RateLimit-Remaining": "0",
+                        "X-RateLimit-Limit": str(decision.limit),
+                        "X-RateLimit-Reset": str(decision.reset_seconds),
+                    },
                 )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Не могу обработать этот запрос",
             )
+        response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+        response.headers["X-RateLimit-Limit"] = str(decision.limit)
+        response.headers["X-RateLimit-Reset"] = str(decision.reset_seconds)
 
     session_mgr = SessionManager(redis_client)
 

@@ -32,17 +32,18 @@ class SecurityGateway:
     async def check(self, user_id: str, text: str) -> GatewayDecision:
         trace_id = str(uuid4())
 
-        if not await self.rate_limiter.is_allowed(user_id):
+        status = await self.rate_limiter.hit(user_id)
+        if not status.allowed:
             await self._incr_stat("rate_limited")
-            return self._decide(user_id, False, "rate_limited", trace_id)
+            return self._decide(user_id, False, "rate_limited", trace_id, status)
 
         if await self.injection.is_injection(text):
             await self._incr_stat("blocked_injections")
-            return self._decide(user_id, False, "injection", trace_id)
+            return self._decide(user_id, False, "injection", trace_id, status)
 
-        return self._decide(user_id, True, None, trace_id)
+        return self._decide(user_id, True, None, trace_id, status)
 
-    def _decide(self, user_id, allowed, reason, trace_id) -> GatewayDecision:
+    def _decide(self, user_id, allowed, reason, trace_id, status) -> GatewayDecision:
         logger.info(
             "gateway decision: %s",
             {
@@ -52,7 +53,14 @@ class SecurityGateway:
                 "trace_id": trace_id,
             },
         )
-        return GatewayDecision(allowed=allowed, reason=reason, trace_id=trace_id)
+        return GatewayDecision(
+            allowed=allowed,
+            reason=reason,
+            trace_id=trace_id,
+            remaining=status.remaining,
+            limit=status.limit,
+            reset_seconds=status.reset_seconds,
+        )
 
     async def _incr_stat(self, field: str) -> None:
         try:
