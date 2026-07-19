@@ -1,6 +1,8 @@
 """Чистые (без тяжёлых импортов) хелперы для eval_rag.py — вынесены сюда,
 чтобы покрыть юнит-тестами без загрузки mlflow/ragas/llama_index."""
 
+import math
+
 
 def model_short(model: str) -> str:
     """Короткий слаг модели для run_name и имени кэша: последний сегмент после '/'.
@@ -35,3 +37,9 @@ def build_mlflow_tags(
         "stage": stage,
         "langfuse_session_id": langfuse_session_id,
     }
+
+
+def mean_valid_latency(latencies: list) -> float | None:
+    """Среднее по конечным (не-NaN) значениям; None если нет ни одного."""
+    valid = [x for x in latencies if isinstance(x, float) and not math.isnan(x)]
+    return sum(valid) / len(valid) if valid else None

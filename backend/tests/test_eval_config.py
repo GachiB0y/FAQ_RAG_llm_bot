@@ -34,3 +34,17 @@ def test_build_mlflow_tags_has_required_keys():
     )
     assert set(tags) >= {"git_commit", "dataset_version", "judge", "purpose", "stage"}
     assert tags["judge"] == "openai/gpt-5.4"
+
+
+def test_mean_valid_latency_skips_nan():
+    from eval_config import mean_valid_latency
+    import math
+    assert mean_valid_latency([1.0, 2.0, float("nan"), 3.0]) == 2.0
+    assert mean_valid_latency([float("nan")]) is None
+    assert mean_valid_latency([]) is None
+    assert mean_valid_latency([0.5]) == 0.5
+
+
+def test_mean_valid_latency_all_valid():
+    from eval_config import mean_valid_latency
+    assert mean_valid_latency([1.0, 3.0]) == 2.0
